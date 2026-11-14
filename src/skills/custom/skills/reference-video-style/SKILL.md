@@ -1,123 +1,121 @@
----
-name: reference-video-style
-description: Shared visual style and visual grammar for the user's minimalist illustrated documentary explainer videos.
+# Shared production authority
+
+This skill participates in one production pipeline. Apply the shared documents below before local instructions. In a conflict, the shared contract wins; report an unresolvable conflict rather than silently translating a field.
+
+- `src/skills/custom/skills/STORYTELLING_STANDARD.md` — narrative decisions and cognitive/visual storytelling.
+- `src/skills/custom/skills/PIPELINE_CONTRACTS.md` — canonical artifact fields, IDs, ownership, and adapters.
+- `src/skills/custom/skills/QUALITY_RUBRIC.md` — creative scoring and release gates.
+- `src/skills/custom/skills/REVISION_PROTOCOL.md` — targeted revision and stale-artifact rules.
+
+Global invariants: minimalist illustrated documentary explainer; vertical 9:16; text-free generated artwork; programmatic typography/overlays; one visual idea per scene; factual claims traceable to sources; no unsupported visual invention. Technical validity and creative quality are separate decisions.
+
 ---
 
-# Reference Video Style Contract
+---
+name: reference-video-style
+description: Shared visual style, pacing contract, and visual grammar for minimalist illustrated documentary explainer videos.
+---
+
+# Reference Video Style & Pacing Contract
 
 ## Mission
 
-Reproduce the visual language of the supplied reference video, regardless of topic or script. The script may change completely; the visual system must remain recognizably consistent.
+Reproduce the signature visual language and high-retention pacing of the reference explainer format, regardless of topic. While the script adapts to any subject, the visual system, card architecture, and editorial rhythm must remain unmistakably consistent from frame 1 to the final cut.
 
-This is a **minimalist illustrated explainer presented as a sequence of designed visual cards**. It is not live-action, not a cinematic storyboard, not a slideshow of unrelated stock images and not a sequence of isolated icons.
+This is a **minimalist illustrated documentary presented as a sequence of designed visual cards**—never live-action, cinematic 3D, a slideshow of stock imagery, or disconnected floating icons.
 
-## 1. Canvas and card layout
+---
 
-- Final video format: vertical 9:16, normally 1080 × 1920.
-- Each scene is a designed illustration card with a stable layout.
-- Keep the card's internal composition consistent from scene to scene:
-  - **Top band:** recurring short video title/header, centered or consistently aligned.
-  - **Middle area:** the main illustration; this receives the largest share of visual space.
-  - **Bottom band:** bold caption, usually one or two lines.
-- Preserve clear margins and safe areas. Keep all important text away from the crop edges.
-- The reference uses a light/cream card against a dark/black surrounding field in some shots. The Renderer may reproduce that framing: a centered light card with black top/bottom letterbox space. Do not stretch the artwork to fill the entire canvas if doing so changes the reference's visual balance.
-- Choose one card template for the whole video and do not casually change its proportions.
+## 1. Canvas & Card Layout
 
-## 2. Header
+- **Aspect Ratio & Resolution:** Vertical `9:16` (`1080 × 1920`).
+- **Framing:** A full-frame warm cream (`#FDFBF7`) 9:16 canvas. Do not add a black letterbox frame. Keep the same canvas and three-band card template in every scene.
+- **Internal Card Zones (Strict Separation):**
+  1. **Header Band (Top):** Recurring short video title, centered and identically positioned on every card.
+  2. **Artwork Zone (Middle):** Dominant central region holding the minimalist 2D illustration. Keep clear breathing room around the edges.
+  3. **Caption Band (Bottom):** Bold, high-contrast 1–2 line summary caption with selective red emphasis.
 
-- Repeat the same short video title on every card.
-- Header text is uppercase or visually equivalent, bold, hand-drawn/rounded display lettering.
-- Keep the wording, position, scale and typography consistent.
-- Do not invent a new header for every scene.
-- The Director supplies the canonical `videoTitle`; the Renderer repeats it.
+---
 
-## 3. Central illustration
+## 2. Header Rules
 
-- Minimalist hand-drawn 2D illustration.
-- Simple stick-figure or very simplified human characters.
-- Round heads, uncomplicated facial features, thin-to-medium black outlines.
-- Express emotion through posture, gestures, facial expression and spacing.
-- Flat fills, restrained soft shadows only when useful.
-- Light cream, warm off-white or pale neutral backgrounds.
-- Muted earthy colors, gentle greens, pale blues, warm browns and occasional soft orange/yellow.
-- Red is a selective emphasis color, not a general decoration color.
-- Drawings should feel friendly, clear, slightly imperfect and hand-illustrated.
-- Avoid photorealism, 3D rendering, glossy gradients, cinematic CGI, complex textures, detailed anatomy, dramatic lens effects and realistic film stills.
+- Repeat the exact same canonical `videoTitle` (2–4 uppercase words) on every card.
+- Typography: Bold, rounded, friendly hand-drawn/display sans-serif in dark charcoal/black (`#1A1A1A`).
+- Never alter wording, scale, tracking, or vertical position between scenes.
 
-## 4. Composition grammar: one idea, multiple elements
+---
 
-Each card communicates one central idea. It may use several related elements in a single unified composition.
+## 3. Central Illustration Style
 
-Allowed composition patterns:
+- **Line & Form:** Minimalist hand-drawn 2D editorial ink illustration. Thin-to-medium consistent black outlines (`#1A1A1A`), slightly organic and human—never sterile vector geometry.
+- **Characters:** Simple stick-figure or ultra-simplified human characters with round heads, minimal dot/line facial features, and expressive posture, gestures, and spatial distance. Reuse the exact same character designs and proportions across all scenes.
+- **Color Palette:**
+  - Card/background: Warm cream (`#FDFBF7`).
+  - Fills: Flat, muted earthy tones—sage greens, dusty blues, warm browns, soft ochre/yellow, and light warm grays. Restrained soft drop-shadows only where needed for depth.
+  - Accent: Crimson/editorial red (`#E63946`) reserved strictly for meaningful focal highlights (e.g., a key trend line, warning indicator, or critical object) and caption emphasis.
+- **Zero Embedded Text:** The illustration generator must **never** render text, numbers, or labels inside the artwork. Any chart labels or year markers are specified as `programmaticOverlays` and rendered cleanly in code.
 
-- One character interacting with an object or situation.
-- Two or more characters demonstrating a relationship or disagreement.
-- Side-by-side comparison with a visible dividing line or clear spatial separation.
-- Before/after comparison.
-- A simple chart or diagram integrated into the scene.
-- A central metaphor surrounded by a few supporting symbols.
-- A small group or community contrasted with a large network or system.
-- Cause → effect shown through spatial arrangement, arrows or connected objects.
+---
 
-The composition must have a clear visual hierarchy:
+## 4. Visual Storytelling Grammar (One Idea, Clear Relationships)
 
-1. Main subject or metaphor.
-2. Supporting evidence/characters/objects.
-3. Small labels or symbols only if needed.
+Every card communicates **one clear visual idea** that advances the argument. Do not decorate empty space with filler objects; every visual element must explain, compare, or prove a point in the narration.
 
-Do not turn every sentence into a separate picture. Combine adjacent narration lines when they explain the same idea. Conversely, split a long narration beat when the visual idea changes.
+**Allowed 9:16-Friendly Composition Patterns:**
 
-Do not add unrelated decorative objects merely to fill space. Every element must explain, compare, identify or reinforce something in the narration.
+- **Character + Environment/Prop:** Protagonist interacting with a specific object, screen, or obstacle.
+- **Top-and-Bottom Comparison:** Horizontal divider separating two states (e.g., _Expectation vs. Reality_, _1820 vs. Today_)—**never** cramped left/right vertical split-screens.
+- **Foreground vs. Background Contrast:** Protagonist in the foreground contrasted against a crowd, city, or system in the background.
+- **Integrated Chart / Diagram:** Clean, single-variable trend curve or mechanism diagram integrated directly into the scene alongside the character.
+- **Cause → Effect Flow:** Spatial progression using simple directional arrows or a 2-step sequence.
 
-## 5. Bottom caption grammar
+**Visual Hierarchy:**
 
-This is a signature feature and must be deliberately planned.
+1. Primary subject or core visual metaphor (largest, central).
+2. Relational context (what they are reacting to, comparing against, or trapped inside).
+3. Supporting evidence prop or chart curve.
 
-- Every card has a concise bottom caption unless the Director explicitly marks a deliberate exception.
-- Usually one or two lines, large, bold, highly readable.
-- Use black/dark text for the setup or ordinary phrase.
-- Highlight the key phrase in red. Often this is the final phrase, contrast, punchline, consequence or emotional turn.
-- The red phrase must carry meaning; do not highlight random words.
-- The caption should summarize the card's central point, not transcribe the full narration.
-- Prefer concise phrasing. Do not cram a whole sentence or paragraph into the bottom band.
-- The Storyboard must specify exact caption text and which words are red.
-- The Renderer must implement mixed-color text as separate styled spans or text runs. Do not rely on the image model to spell the caption correctly.
+---
 
-Examples of the pattern (illustrative wording, not mandatory copy):
+## 5. Bottom Caption Grammar
 
-- `EVERYTHING AT HIS` / `FINGERTIPS.` (red emphasis)
-- `A VILLAGE VERSUS` / `THE WHOLE WORLD.` (red emphasis)
-- `BETTER ON PAPER.` / `NOT IN FEELING.` (red emphasis)
-- `WHAT MATTERS WAS` / `NEVER MEASURED.` (red emphasis)
+The bottom caption is the rhythmic punchline of each card—not a subtitle transcript of the voiceover.
 
-The most important phrase often appears on the second line and is red. This is a visual rhythm, not an absolute rule: choose the emphasis based on meaning.
+- **Structure:** 1 or 2 short lines, uppercase, bold rounded display typography.
+- **Color Split:**
+  - `line1` (Setup / Context): Dark ink (`#1A1A1A`).
+  - `line2` (Turn / Punchline / Consequence): Highlighted in editorial red (`#E63946`) via `redEmphasis` (either the entire second line or its decisive final phrase).
+- **Precision:** Keep total caption length under ~7–9 words so it reads effortlessly at phone size in under 1.5 seconds.
+- **Schema:** Always output plain uppercase strings (`line1`, `line2`, `redEmphasis`)—never raw HTML tags.
 
-## 6. Image count and pacing (High-Retention Short-Form Rhythm)
+**Examples of Effective Caption Rhythm:**
 
-- Viewer attention spans are short: maintain steady visual momentum with **14–16 distinct visual cards** for a 60–70 second explainer (roughly **1 card every 3.5 to 5.0 seconds**).
-- Never leave a single static illustration on screen for longer than **5.5 seconds**.
-- When a narration line has a setup and a twist, contrast, or consequence, split it across **two consecutive cards** (e.g., Card A shows the setup for 3.5s; Card B cuts to the twist/punchline for 3.5s).
-- Every card change must still introduce a meaningful visual shift—a new action, a zoom/reaction, a comparison, a chart step, or a payoff—never random filler.
-- Do not enforce one image per sentence.
-- Plan one card for each distinct visual idea or meaningful change in the argument.
-- A card commonly stays on screen for several seconds while the narration develops.
-- As a starting estimate, use roughly 4–7 seconds per card for a short explainer; adjust to narration complexity and actual voiceover timing.
-- A 60–70 second video may naturally need around 10–16 cards, but this is only a planning range, not a quota.
-- Use fewer cards when one composition can clearly carry a complete thought. Use more when the visual argument genuinely changes.
-- Avoid rapid-fire image changes that prevent the viewer from reading the caption and understanding the illustration.
-- Do not duplicate a card just to fill time. If the narration continues, hold the card, apply a very subtle push-in, or reveal a small element only if the Renderer supports it.
+- `EVERYTHING AT HIS` / `FINGERTIPS.` _(red)_
+- `A VILLAGE VERSUS` / `THE WHOLE WORLD.` _(red)_
+- `BETTER ON PAPER.` / `NOT IN FEELING.` _(red)_
+- `THE GOALPOSTS KEEP` / `MOVING FORWARD.` _(red)_
 
-## 7. Scene-to-scene alignment
+---
 
-The images must feel like a visual argument unfolding in order.
+## 6. Unified Pacing & Visual Momentum Contract
 
-- Each card must connect to the preceding and following card logically.
-- Reuse characters, objects, colors or visual motifs when the narrative returns to the same concept.
-- A comparison introduced in one card may be expanded in the next.
-- A chart or metaphor introduced earlier should not change meaning without explanation.
-- Keep the header, card template, caption position, line weight and character design consistent.
-- Use simple cuts or restrained transitions. Avoid flashy transitions, random motion and unrelated B-roll.
-- A scene change should occur when the narration introduces a new visual idea, contrast, example, consequence or conclusion—not merely at every punctuation mark.
+- **Target Runtime & Card Count:** **60–70 seconds** structured across **14–16 distinct visual cards** (**3.5–5.5 seconds per card**).
+- **Maximum Hold Rule:** Never hold a single static illustration on screen for longer than **5.5 seconds**.
+- **Setup-and-Payoff Splitting:** When a narration sentence contains a setup and an ironic twist, contrast, or reveal, split it across **two consecutive cards** (Card A = Setup ~3.5s → Cut → Card B = Twist/Payoff ~3.5s).
+- **Earned Cuts Only:** Every card cut must introduce a meaningful visual shift (a new action, camera zoom/crop on a reaction, a chart step, or a counter-example). Never duplicate cards or cut randomly mid-thought.
+
+---
+
+## 7. Scene-to-Scene Continuity & Negative Constraints
+
+- **Continuity:** Maintain identical header placement, card borders, line weight, character proportions, and color palette from Card 1 to the final card.
+- **Transitions:** Hard cuts or subtle 0.15s cross-dissolves only. Subtle slow push-in (100% → 104% scale) permitted on longer holds.
+- **Strictly Forbidden:**
+  - Photorealism, 3D/Pixar rendering, glossy gradients, cinematic lighting, depth-of-field blur, or film grain.
+  - Anime, manga, or detailed comic-book crosshatching.
+  - Narrow vertical left/right split-screens that squish characters on mobile.
+  - AI-generated gibberish text inside artwork.
+  - Flashy wipes, spins, bounce animations, or kinetic typography clutter.
 
 ## 8. Text and image separation
 
@@ -156,3 +154,17 @@ A card matches the reference style only if:
 - The key phrase is intentionally emphasized, commonly in red.
 - Its drawing style and palette match the other cards.
 - It can remain on screen for several seconds without feeling visually empty or overcrowded.
+
+
+## Canonical palette authority
+The productionBible palette is the source of truth. The default palette is warm cream `#FDFBF7`,
+near-black ink `#1A1A1A`, warm beige `#DCCBB5`, soft sage `#A8B9A0`, dusty blue `#A8C2D1`,
+muted ochre `#D9B66F`, muted brown `#9A7658`, and selective crimson `#E63946`.
+If a project productionBible explicitly defines a different approved palette, that project palette
+wins consistently across every visual stage. Never mix palette variants within one film.
+
+
+## Canonical 9:16 safe-zone geometry
+Use the full 1080×1920 canvas: header Y 0–14%, artwork Y 15–74%, caption Y 75–100%.
+The warm cream background continues through all three bands. Only the central band contains generated
+artwork. The header/caption text is added programmatically. Do not introduce black letterbox bands.
