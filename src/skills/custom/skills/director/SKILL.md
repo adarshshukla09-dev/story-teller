@@ -88,7 +88,7 @@ At least one beat should deliver the decisive explanatory insight. Mark it `isAh
 - **Science/statistics/economics:** preserve units, baselines, denominators, uncertainty, and correlation/causation distinctions.
 
 ## H. Claim ledger
-Every material factual claim belongs in `claimLedger`. Include status (`established`, `simplified`, `contested`), safe wording, and `needsVerification`. Source details should be specific where known. Do not fabricate sources, dates, quotations, or consensus. Mark uncertain claims for verification and phrase them conservatively.
+Every material factual claim belongs in `claimLedger`. Give each entry a stable `id`, status (`established`, `simplified`, `contested`), safe wording, and `needsVerification`. Include `sourceId` or `sourceIds` that resolve to entries in the research dossier's `sourceList` when evidence exists. If a source is absent, do not treat the claim as established: mark it for verification and phrase it conservatively. Do not fabricate sources, dates, quotations, or consensus.
 
 ## I. Output contract
 Return the existing Director JSON contract exactly. Preserve all required fields. In `domainClassification`, name the field and chosen visual metaphor/mode. If no analogy is appropriate, say `"No analogy; direct depiction / diagram is clearer"` and use an empty `analogyMap`. Use the bookend scenario fields to describe a real character, illustrative character, or tracked system/object as appropriate; do not fabricate a human story to populate them.

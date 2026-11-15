@@ -2,53 +2,13 @@ import { Annotation } from "@langchain/langgraph";
 
 import type { ValidatorReport } from "../skills/custom/skills/qa/validate_package.js";
 import type { Stage } from "../agents/QA.agent.js";
+import type { Scene } from "../schema/scene.schema.js";
+import type { Script } from "../schema/script.schema.js";
+export type { Scene } from "../schema/scene.schema.js";
 
 // ------------------------------------
 // Storyboard
 // ------------------------------------
-
-export interface Scene {
-  sceneId: number;
-  sourceBeatIds?: string[];
-
-  // Copied verbatim from the script beat; never edited by the storyboard agent.
-  narration: string;
-  estimatedDurationSeconds?: number;
-  /** @deprecated older storyboards used `duration`; prefer estimatedDurationSeconds. */
-  duration?: number;
-
-  centralIdea?: string;
-  visualPurpose: string;
-  visualMetaphor?: string;
-  analogyRelationShown?: string | null;
-  compositionType?: string;
-  primarySubject?: string;
-  supportingElements?: string[];
-  isAhaCard?: boolean;
-  echoesScene?: number | null;
-
-  characters?: {
-    characterId: string;
-    name?: string;
-    expression?: string;
-    pose?: string;
-  }[];
-
-  // Exact programmatic text from storyboard
-  headerText?: string;
-
-  caption?: {
-    line1: string;
-    line2?: string;
-    redEmphasis?: string;
-  };
-
-  programmaticOverlays?: {
-    diagramLabels?: string[];
-  };
-
-  transitionToNext?: string;
-}
 
 // ------------------------------------
 // Composition Designer
@@ -113,6 +73,9 @@ export interface VisualPrompt {
 
   prompt: string;
 
+  /** Self-contained SVG card embedded directly in the final result JSON. */
+  svg?: string;
+
   negativePrompt: string;
 
   requiredElements: string[];
@@ -173,7 +136,7 @@ export interface QualityReport {
     sceneId: number | string | null;
     problem: string;
   }[];
-  factReview: unknown[];
+  factReview: unknown;
   analogyReview: unknown[];
   depictionReview: unknown[];
   creativeScores?: {
@@ -200,13 +163,20 @@ export interface QualityReport {
 export const FilmState = Annotation.Root({
   topic: Annotation<string>(),
 
+  sourceMaterials: Annotation<any[]>({ reducer: (_, next) => next, default: () => [] }),
+  audience: Annotation<string>({ reducer: (_, next) => next, default: () => "curious beginner" }),
+  researchDossier: Annotation<any>({ reducer: (_, next) => next, default: () => null }),
+  explanationStrategy: Annotation<any>({ reducer: (_, next) => next, default: () => null }),
+  factCheckReport: Annotation<any>({ reducer: (_, next) => next, default: () => null }),
+  comprehensionReport: Annotation<any>({ reducer: (_, next) => next, default: () => null }),
+
   // Parsed objects (not JSON strings), so every stage and the validator read the same data.
   creativeBrief: Annotation<any>({
     reducer: (_, next) => next,
     default: () => null,
   }),
 
-  script: Annotation<any>({
+  script: Annotation<Script | string | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),

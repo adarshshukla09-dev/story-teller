@@ -6,19 +6,29 @@ export type SkillReference = {
 };
 
 export const skillRegistry = {
+  research: [{ repository: "custom", name: "research" }],
+  strategy: [
+    { repository: "custom", name: "strategy" },
+    { repository: "custom", name: "storycraft" },
+  ],
+  factCheck: [{ repository: "custom", name: "fact-check" }],
+  comprehension: [{ repository: "custom", name: "comprehension" }],
   director: [
     { repository: "custom", name: "reference-video-style" },
     { repository: "custom", name: "director" },
+    { repository: "custom", name: "storycraft" },
   ],
 
   script: [
     { repository: "custom", name: "reference-video-style" },
     { repository: "custom", name: "scriptwriter" },
+    { repository: "custom", name: "storycraft" },
   ],
 
   storyboard: [
     { repository: "custom", name: "reference-video-style" },
     { repository: "custom", name: "storyboard" },
+    { repository: "custom", name: "storycraft" },
   ],
 
   imagePrompt: [
@@ -34,6 +44,7 @@ export const skillRegistry = {
   qa: [
     { repository: "custom", name: "reference-video-style" },
     { repository: "custom", name: "qa" },
+    { repository: "custom", name: "storycraft" },
   ],
   composition: [
     { repository: "custom", name: "reference-video-style" },

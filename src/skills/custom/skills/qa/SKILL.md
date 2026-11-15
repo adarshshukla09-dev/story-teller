@@ -38,7 +38,7 @@ Two layers, in this order:
 
 ## 2. Validator coverage (for your reference)
 
-The input is `{ package, validatorReport }`. The validator checks: beat count 14-16; `narration` equals joined beats; declared vs actual word counts; total words vs target; per-beat duration 3.5-5.5 s; words per second <= 3.0; duration sum within +/-1.0 s of target; `durationSumCheck` honesty; connector vocabulary (START/BUT/THEREFORE); banned deterministic phrasing; caption length, substring, HTML; scene-to-beat mapping (narration, caption, duration, source ids); title consistency; scene id consistency; compositionPlan schema and coordinate bounds; visualPrompts (no quoted text or years, safe-zone statement, overlay parity); `isAhaCard`, `analogyMap`, `beatMap`; C01 present; image-level continuity `not_verified` without images.
+The input is `{ package, validatorReport }`. The validator checks: `script.beats` exists as an array; beat count 14-16; stable Bnn IDs/card numbers; `narration` equals joined beats; declared vs actual word counts; total words vs target; per-beat duration 3.5-5.5 s; words per second <= 3.0; duration sum within +/-1.0 s of target; `durationSumCheck` honesty; connector vocabulary (START/BUT/THEREFORE); banned deterministic phrasing; caption length, substring, HTML; beat claim IDs resolve to the brief's claim ledger and ledger source IDs resolve to the dossier source list; scene-to-beat mapping (narration, caption, duration, source ids); required title consistency; scene id consistency; compositionPlan schema and coordinate bounds; visualPrompts (no quoted text or years, safe-zone statement, overlay parity); `isAhaCard`, `analogyMap`, `beatMap`; C01 present; image-level continuity `not_verified` without images.
 
 ## 3. Judgment layer (you do these)
 
@@ -56,7 +56,7 @@ Ask of each claim: would a domain expert sign off on this as stated? Absolutes (
 
 ### B. Analogy fidelity (`reviseTarget: "storyboard"`)
 
-For each `analogyMap` row and each scene's `analogyRelationShown`, check that **the visual relationship matches the real one**, not just that the objects match. Examples of failures: a shared resource drawn as a separate cable to each user; a running copy drawn as the same object as its blueprint; a one-directional dependency drawn as mutual. Wrong relation = `misleading` = blocking. Also check every prop in the storyboard exists in `analogyMap`.
+For each `analogyMap` row and each scene's `analogyRelationShown`, check that **the visual relationship matches the real one**, not just that the objects match. Examples of failures: a shared resource drawn as a separate cable to each user; a running copy drawn as the same object as its blueprint; a one-directional dependency drawn as mutual. Wrong relation = `misleading` = blocking. Also check every prop in the storyboard exists in `analogyMap`. An empty map is acceptable only when the Director explicitly says in `whereAnalogyBreaks` that no analogy is suitable and direct depiction/diagram is clearer; evaluate whether that choice improves accuracy rather than treating analogy use itself as mandatory.
 
 ### C. Depiction and alignment (`reviseTarget: "storyboard"`)
 
@@ -65,10 +65,10 @@ For each scene, does `visualPurpose` show **that beat's** claim (not a neighbour
 ### D. Story craft (`reviseTarget: "script"` or `"storyboard"`)
 
 - Hook opens a curiosity gap with a concrete moment; the final beat delivers `oneIdea` in a form the viewer can repeat.
-- Every beat links to the previous by BUT or THEREFORE and the link makes sense when read aloud.
+- Every beat has an honest relationship to the previous beat (contrast, consequence, chronology, or evidence); the connector must express that relationship rather than forcing BUT/THEREFORE.
 - The mechanism is actually explained (a "because"), and an inside-the-mechanism aha card exists.
 - No filler beats; no stage-direction narration; no slogan or moralizing ending; resolution balances value against the trap or limit.
-- C01 is never absent for 3+ consecutive scenes; the last scene echoes the first.
+- Maintain a visual anchor when the brief calls for one; a tracked system/object may replace a human protagonist. A bookend echo is desirable only when it adds meaning; do not require an artificial character or callback.
 - Captions are punchlines, not subtitles.
 
 ### E. Image inspection (stage 2)
@@ -178,14 +178,14 @@ Return valid JSON only, no commentary:
 
 
 ## Creative quality scorecard (required)
-Evaluate the ten dimensions in `../QUALITY_RUBRIC.md`: hook/curiosity, narrative structure,
+Evaluate the ten dimensions in `../QUALITY_RUBRIC.md` on a 1–10 scale and report their arithmetic mean on the same 1–10 scale: hook/curiosity, narrative structure,
 central-idea clarity, cause/effect progression, emotional engagement, analogy fidelity,
 visual storytelling, aha/payoff, factual accuracy, and ending/memorability.
 Give each a defensible 1–10 score with one sentence of evidence. Compute the arithmetic mean
 without rounding upward. If you cannot inspect a generated image, mark image-level evaluation
 pending/not verified; do not infer visual quality from prompts alone. Report technical compliance
 separately from creative quality. The release gates in the shared rubric are mandatory.
-A target of 9/10 is aspirational and must never alter the score.
+A creative average of 8.5/10 is the target; 9/10 is exceptional. Neither target may alter the evidence-based score.
 
 ## Revision specificity
 Every blocking issue must identify the affected artifact and exact field/scene/beat, state the
@@ -194,7 +194,7 @@ name every downstream artifact that is stale using `REVISION_PROTOCOL.md`. After
 inspect the revised artifact and use the validator's new report; never carry forward a prior pass.
 
 
-When the average is below 9.0 and there is a specific, achievable improvement, set `status:"revise"`
+When the average is below 8.5 and there is a specific, achievable improvement, set `status:"revise"`
 and route to the earliest responsible stage. Do not manufacture revisions for subjective preference
 or attempt revisions that would damage factual integrity. If the configured revision limit is
 exhausted, return the honest final score and unresolved issues; never relabel the result as 9+.

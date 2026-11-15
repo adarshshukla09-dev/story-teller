@@ -8,7 +8,18 @@ import {
 
 import { loadMultipleSkills } from "./skills-loader.js";
 export type TaskType = AgentTask;
+// Skill files are static during a run; read each task's bundle once instead of on every agent call.
+const skillCache = new Map<AgentTask, string>();
+
 export async function getSkills(task: AgentTask): Promise<string> {
+  const cached = skillCache.get(task);
+  if (cached !== undefined) return cached;
+  const bundle = await buildSkills(task);
+  skillCache.set(task, bundle);
+  return bundle;
+}
+
+async function buildSkills(task: AgentTask): Promise<string> {
   const references = skillRegistry[task];
 
   if (!references) {
@@ -36,7 +47,7 @@ export async function getSkillsForTask(task: string): Promise<string> {
   if (!isValidTask(task)) {
     throw new Error(
       `Unknown agent task: "${task}". ` +
-        `Available tasks: director, script, storyboard, imagePrompt, continuity, qa, renderer`,
+        `Available tasks: research, strategy, factCheck, comprehension, director, script, storyboard, imagePrompt, continuity, qa, renderer, composition`,
     );
   }
 

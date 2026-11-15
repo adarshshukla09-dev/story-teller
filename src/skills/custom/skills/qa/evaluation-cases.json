@@ -1,0 +1,123 @@
+{
+  "suite": "Universal Storyteller explainer evaluation",
+  "version": 2,
+  "purpose": "Use the same prompts, source materials, model settings and deterministic validator before and after a change. Score outputs independently; never assign target scores by default.",
+  "requiredCreativeDimensions": [
+    "hookAndCuriosity",
+    "narrativeStructure",
+    "centralIdeaClarity",
+    "causeAndEffectProgression",
+    "emotionalEngagement",
+    "analogyQualityAndFidelity",
+    "visualStorytelling",
+    "ahaMomentAndPayoff",
+    "factualAccuracy",
+    "endingAndMemorability"
+  ],
+  "scoring": {
+    "dimensionScale": "1-10",
+    "average": "Arithmetic mean of all ten scores, reported to one decimal place; do not round up.",
+    "technicalValidity": "Report separately as pass/fail from validate_package; never blend it into the creative average.",
+    "evidenceRequirement": "Every score below 9 includes a concrete weakness and an actionable improvement. A 9 or 10 requires evidence of exceptional execution."
+  },
+  "comparison": {
+    "baseline": "not_run: the supplied archive contains no previous model run package or scores",
+    "afterChange": "not_run: the supplied archive contains no package manifest, runtime dependencies, model credentials, or saved output package",
+    "doNotInfer": "Do not fill in baseline or after-change scores until actual packages have been evaluated."
+  },
+  "cases": [
+    {
+      "id": "science-01",
+      "domain": "scientific explainer",
+      "topic": "Why does wind make a person feel colder?",
+      "sourceRequirement": "Provide reputable source material on heat transfer and wind chill; preserve the difference between measured air temperature and perceived/combined wind-chill conditions.",
+      "evaluationFocus": [
+        "clear mechanism",
+        "accurate everyday example",
+        "qualified claims"
+      ]
+    },
+    {
+      "id": "psychology-01",
+      "domain": "psychology",
+      "topic": "Why can we miss a visible change when our attention is focused elsewhere?",
+      "sourceRequirement": "Provide primary or academic sources on change blindness/attention; distinguish a demonstrated effect from broad claims about all people or situations.",
+      "evaluationFocus": [
+        "relatable human setup",
+        "demonstrable aha",
+        "no overgeneralization"
+      ]
+    },
+    {
+      "id": "history-01",
+      "domain": "historical explainer",
+      "topic": "How did the Berlin Airlift supply West Berlin during the blockade?",
+      "sourceRequirement": "Provide reliable historical sources; distinguish documented events from later interpretation and avoid invented dialogue or private motives.",
+      "evaluationFocus": [
+        "causal chronology",
+        "human-scale stakes",
+        "evidence-backed claims"
+      ]
+    },
+    {
+      "id": "economics-01",
+      "domain": "economics",
+      "topic": "How can a bank run happen even when a bank owns valuable assets?",
+      "sourceRequirement": "Provide sources on liquidity, maturity transformation and bank runs; distinguish simplified teaching models from claims about every bank or crisis.",
+      "evaluationFocus": [
+        "faithful analogy limits",
+        "cause-and-effect",
+        "careful qualifications"
+      ]
+    },
+    {
+      "id": "technology-01",
+      "domain": "technology",
+      "topic": "Why can adding a cache sometimes make an application slower or less reliable?",
+      "sourceRequirement": "Provide technical documentation or academic/primary sources on cache hits, misses, invalidation and consistency; state the system boundary and conditions.",
+      "evaluationFocus": [
+        "system boundaries",
+        "visual process clarity",
+        "trade-off and failure mode"
+      ]
+    },
+    {
+      "id": "cs-02-docker",
+      "domain": "computer science / systems",
+      "topic": "What problem do Docker containers solve, and what do they actually isolate?",
+      "sourceRequirement": "Use official Docker documentation and reputable systems references. Distinguish images from containers, container isolation from virtual machines, and namespaces/cgroups or platform-dependent implementation details where relevant. Avoid claiming containers are complete security boundaries in every configuration.",
+      "evaluationFocus": [
+        "task-based hook",
+        "accurate system boundary",
+        "image-versus-container distinction",
+        "worked deployment example",
+        "limitations and trade-offs"
+      ]
+    },
+    {
+      "id": "psychology-02-progress-paradox",
+      "domain": "psychology / economics",
+      "topic": "Why can life improve while people do not feel proportionally happier?",
+      "sourceRequirement": "Use primary research and reputable reviews. Distinguish hedonic adaptation, wanting versus liking where supported, the Easterlin paradox debate, income effects, and individual variation. Do not present disputed findings as settled universal laws.",
+      "evaluationFocus": [
+        "relatable but non-fabricated hook",
+        "mechanism not slogan",
+        "evidence nuance",
+        "actionable but qualified payoff"
+      ]
+    },
+    {
+      "id": "history-02-berlin-wall",
+      "domain": "modern history",
+      "topic": "Why was the Berlin Wall built, how did it change life in Berlin, and what led to its opening in 1989?",
+      "sourceRequirement": "Use authoritative archival, museum, or historical sources. Distinguish the 1961 construction, Cold War context, border regime, 1989 events, and later interpretations. Avoid monocausal explanations, invented dialogue, or claims that one event alone caused the opening.",
+      "evaluationFocus": [
+        "human stakes grounded in documented conditions",
+        "causal chronology",
+        "multiple interacting causes",
+        "careful distinction between fact and interpretation",
+        "opening/payoff"
+      ]
+    }
+  ]
+}

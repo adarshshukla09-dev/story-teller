@@ -1,9 +1,9 @@
 /** Deterministic validator for an explainer production package.
  *
- * Library use:   import { validatePackage } from ".../validate_package.js";
- *                const report = validatePackage(pkg);   // pkg fields may be objects or JSON strings
- * CLI use:       npx tsx validate_package.ts package.json [--images-provided]
- *                Exit code: 0 = pass, 1 = blocking issues, 2 = usage/input error.
+- Library use:   import { validatePackage } from ".../validate_package.js";
+-                const report = validatePackage(pkg);   // pkg fields may be objects or JSON strings
+- CLI use:       npx tsx validate_package.ts package.json [--images-provided]
+-                Exit code: 0 = pass, 1 = blocking issues, 2 = usage/input error.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -115,15 +115,35 @@ export function validatePackage(
   const brief = parse(pkg.creativeBrief) || {},
     script = parse(pkg.script) || {},
     sb = parse(pkg.storyboard) || {};
-  const scenes: Obj[] = pkg.scenes || sb.scenes || [],
-    comp: Obj[] = pkg.compositionPlan || [];
-  const vp: Obj[] =
-    pkg.visualPrompts || pkg.visualCompositions?.imagePrompts || [];
+  const scenes: Obj[] = Array.isArray(pkg.scenes)
+    ? pkg.scenes
+    : Array.isArray(sb.scenes)
+      ? sb.scenes
+      : [];
+  const comp: Obj[] = Array.isArray(pkg.compositionPlan)
+    ? pkg.compositionPlan
+    : [];
+  const vp: Obj[] = Array.isArray(pkg.visualPrompts)
+    ? pkg.visualPrompts
+    : Array.isArray(pkg.visualCompositions?.imagePrompts)
+      ? pkg.visualCompositions.imagePrompts
+      : [];
   const bibleWrap = parse(pkg.productionBible) || {},
     bible = bibleWrap.productionBible || bibleWrap;
-  const beats: Obj[] = script.beats || [];
+  const hasBeatArray = Array.isArray(script.beats);
+  const beats: Obj[] = hasBeatArray
+    ? script.beats.map((beat: any) =>
+        beat && typeof beat === "object" ? beat : {},
+      )
+    : [];
 
   // 1. Script arithmetic
+  if (!hasBeatArray)
+    R.block(
+      "schema",
+      null,
+      `script.beats is missing or is not an array (received ${script.beats === undefined ? "no field" : typeof script.beats}). Return the canonical script.beats array; do not substitute scenes/cards or narration-only output.`,
+    );
   const target = Number(
     script.estimatedDurationSeconds || brief.durationTargetSeconds || 0,
   );
@@ -146,6 +166,7 @@ export function validatePackage(
   ];
   R.computed = {
     beatCount: beats.length,
+    scriptBeatArrayPresent: hasBeatArray,
     sceneCount: scenes.length,
     targetDurationSeconds: target,
     sumOfBeatDurations: durSum,
@@ -199,11 +220,18 @@ export function validatePackage(
       null,
       `durationSumCheck claims ${script.durationSumCheck} but actual sum is ${durSum}.`,
     );
-  if (new Set(beats.map((b) => b.estimatedDurationSeconds)).size < 3)
-    R.warn(
+
+  const distinctBeatDurations = new Set(
+    beats.map((b) => b.estimatedDurationSeconds),
+  ).size;
+  const distinctSceneDurations = new Set(
+    scenes.map((s) => s.estimatedDurationSeconds),
+  ).size;
+  if (distinctBeatDurations < 3 || distinctSceneDurations < 3)
+    R.block(
       "pacing",
       null,
-      "Fewer than 3 distinct card durations; rhythm is monotone.",
+      "Fewer than 3 distinct scene/beat durations; rhythm is monotone. At least 3 distinct durations are required.",
     );
 
   for (let i = 0; i < beats.length; i++) {
@@ -211,6 +239,17 @@ export function validatePackage(
       sid = b.cardNumber ?? i + 1,
       w = words(b.narration),
       d = Number(b.estimatedDurationSeconds || 0);
+    if (!script.beats[i] || typeof script.beats[i] !== "object")
+      R.block("schema", i + 1, `script.beats[${i}] must be an object.`);
+    const expectedBeatId = `B${String(i + 1).padStart(2, "0")}`;
+    if (b.beatId !== expectedBeatId)
+      R.block(
+        "schema",
+        sid,
+        `Beat ${i + 1} must use stable beatId '${expectedBeatId}' (received '${b.beatId ?? "missing"}').`,
+      );
+    if (b.cardNumber !== i + 1)
+      R.block("schema", sid, `Beat ${expectedBeatId} must have cardNumber ${i + 1}.`);
     if (d < 3.5 || d > 5.5)
       R.block("timing", sid, `Duration ${d}s outside 3.5-5.5s.`);
     if (d && w / d > MAX_WPS)
@@ -267,15 +306,21 @@ export function validatePackage(
         sid,
         "Caption mostly repeats the narration (subtitle, not punchline).",
       );
+    if (cwords.size > 0 && overlap === 0)
+      R.block(
+        "caption",
+        sid,
+        "Caption has no thematic or lexical overlap with narration; meanings must align.",
+      );
   }
 
-  // 2. Brief -> script contract
+  // 2. Brief -> script contract & Storyboard validation
   const bm = brief.beatMap;
-  if (!bm)
+  if (!Array.isArray(bm))
     R.block(
       "briefContract",
       null,
-      "creativeBrief has no beatMap (old Director output).",
+      "creativeBrief.beatMap is missing or not an array (old or malformed Director output).",
     );
   else {
     if (bm.length !== beats.length)
@@ -284,28 +329,59 @@ export function validatePackage(
         null,
         `beatMap has ${bm.length} cards; script has ${beats.length} beats.`,
       );
-    for (let i = 0; i < Math.min(bm.length, beats.length); i++)
-      if (
-        bm[i].stage !== beats[i]!.stage ||
-        bm[i].connector !== beats[i]!.connector
-      )
+    for (let i = 0; i < Math.min(bm.length, beats.length); i++) {
+      if (!bm[i] || typeof bm[i] !== "object") {
+        R.block("briefContract", i + 1, `beatMap[${i}] must be an object.`);
+        continue;
+      }
+      if (bm[i].stage !== beats[i]!.stage || bm[i].connector !== beats[i]!.connector)
         R.block(
           "briefContract",
           beats[i]!.cardNumber,
           "Stage/connector differs from beatMap.",
         );
-    if (!beats.some((b) => b.isAhaCard))
+    }
+    if (
+      !beats.some((b) => b.isAhaCard) &&
+      !scenes.some((s) => s.isAhaScene || s.isAhaCard)
+    )
       R.block(
         "storyCraft",
         null,
-        "No beat marked isAhaCard (inside-the-mechanism card).",
+        "No beat or scene marked as an Aha moment (isAhaCard / isAhaScene). At least one meaningful aha scene is required.",
       );
   }
+
+  const hasAnalogyMap = Array.isArray(brief.analogyMap);
+  const analogyMap = hasAnalogyMap ? brief.analogyMap : [];
+  const explicitlyNoAnalogy =
+    analogyMap.length === 0 && /no analogy/i.test(String(brief.whereAnalogyBreaks ?? ""));
+  if (!hasAnalogyMap) {
+    R.block(
+      "briefContract",
+      null,
+      "creativeBrief.analogyMap field is missing or is not an array.",
+    );
+  } else if (analogyMap.length === 0 && !explicitlyNoAnalogy) {
+    R.block(
+      "briefContract",
+      null,
+      "creativeBrief.analogyMap is empty without explicitly declaring that no analogy is suitable.",
+    );
+  }
+
   const props = new Set(
-    (brief.analogyMap || []).map((m: Obj) => m.sourceElement),
+    analogyMap
+      .filter((m: Obj) => m && typeof m === "object")
+      .map((m: Obj) => m.sourceElement)
+      .filter((v: unknown) => typeof v === "string" && v.trim().length > 0),
   );
-  if (!props.size)
-    R.block("briefContract", null, "creativeBrief has no analogyMap.");
+  if (!props.size && analogyMap.length > 0)
+    R.block(
+      "briefContract",
+      null,
+      "creativeBrief has no valid analogyMap source elements.",
+    );
   else if (props.size > 4)
     R.warn(
       "storyCraft",
@@ -318,17 +394,58 @@ export function validatePackage(
       null,
       "creativeBrief missing mechanism or oneIdea.",
     );
+  if (!(script.oneIdea || script.centralIdea))
+    R.block("schema", null, "script is missing oneIdea (or the supported centralIdea alias).");
+  if (!(sb.oneIdea || sb.centralIdea))
+    R.block("schema", null, "storyboard is missing oneIdea (or the supported centralIdea alias).");
+  if (!brief.whereAnalogyBreaks)
+    R.block(
+      "briefContract",
+      null,
+      "creativeBrief.whereAnalogyBreaks is missing; state the analogy's limits explicitly.",
+    );
 
-  // 3. Storyboard mapping
-  const sceneIds = scenes.map((s) => s.sceneId);
+  // Consistent central idea across artifacts check
+  const centralIdeas: Obj = {
+    brief: brief.oneIdea || brief.centralIdea,
+    script: script.oneIdea || script.centralIdea,
+    storyboard: sb.oneIdea || sb.centralIdea,
+  };
+  const primaryIdea = centralIdeas.brief;
+  if (primaryIdea) {
+    for (const [k, v] of Object.entries(centralIdeas)) {
+      if (v != null && norm(v) !== norm(primaryIdea)) {
+        R.block(
+          "schema",
+          null,
+          `Central idea / oneIdea mismatch: ${k} differs from brief.`,
+        );
+      }
+    }
+  }
+
+  // 3. Storyboard mapping & Scene validation
+  if (!scenes || scenes.length === 0) {
+    R.block("schema", null, "Storyboard or scenes array is missing or empty.");
+  }
+
+  const sceneIds = scenes.map((s) => s?.sceneId);
+  if (sceneIds.some((id) => id == null || String(id).trim() === "")) {
+    R.block(
+      "schema",
+      null,
+      "One or more scenes have missing or null sceneId values.",
+    );
+  }
   if (new Set(sceneIds).size !== sceneIds.length)
-    R.block("schema", null, "Duplicate sceneIds in scenes.");
+    R.block("schema", null, "Duplicate sceneIds detected in scenes.");
   if (scenes.length !== beats.length)
     R.block(
       "sceneMapping",
       null,
-      `${scenes.length} scenes vs ${beats.length} beats.`,
+      `Scene count mismatch: ${scenes.length} scenes vs ${beats.length} beats. Every script beat must have a matching scene.`,
     );
+
   const title = script.title;
   const titles: Obj = {
     brief: brief.videoTitle,
@@ -337,21 +454,99 @@ export function validatePackage(
     bible: bible.videoTitle,
   };
   for (const [k, v] of Object.entries(titles))
+    if (typeof v !== "string" || !v.trim())
+      R.block("schema", null, `Missing required videoTitle/title in ${k}.`);
+  for (const [k, v] of Object.entries(titles))
     if (v != null && v !== title)
       R.block(
         "schema",
         null,
         `videoTitle mismatch: ${k}='${v}' vs script='${title}'.`,
       );
+
+  // Factual provenance: a beat can cite only a claim in the Director ledger;
+  // each ledger claim must in turn resolve to a real source in the Research dossier.
+  const dossier = parse(pkg.researchDossier) || {};
+  const sourceList: Obj[] = Array.isArray(dossier.sourceList)
+    ? dossier.sourceList
+    : [];
+  const sourceIds = new Set(
+    sourceList
+      .map((source) => source?.id)
+      .filter((id) => typeof id === "string" && id.trim().length > 0),
+  );
+  const claimLedger: Obj[] = Array.isArray(brief.claimLedger)
+    ? brief.claimLedger
+    : [];
+  const claimIds = new Set<string>();
+  if (claimLedger.length === 0)
+    R.block(
+      "epistemic",
+      null,
+      "creativeBrief.claimLedger is missing or empty; material factual claims cannot be traced.",
+    );
+  for (const claim of claimLedger) {
+    const id = String(claim?.id ?? claim?.claimId ?? "").trim();
+    if (!id) {
+      R.block("epistemic", null, "A claimLedger entry has no stable id.");
+      continue;
+    }
+    claimIds.add(id);
+    const refs = Array.isArray(claim.sourceIds)
+      ? claim.sourceIds
+      : claim.sourceId != null
+        ? [claim.sourceId]
+        : [];
+    if (refs.length === 0)
+      R.block(
+        "epistemic",
+        null,
+        `Claim ${id} has no sourceId/sourceIds; mark the claim for verification and do not present it as established.`,
+      );
+    for (const sourceId of refs)
+      if (!sourceIds.has(sourceId))
+        R.block(
+          "epistemic",
+          null,
+          `Claim ${id} references source '${sourceId}', which is absent from researchDossier.sourceList.`,
+        );
+  }
+  for (let i = 0; i < beats.length; i++) {
+    const refs = beats[i]!.claimIds;
+    if (!Array.isArray(refs)) {
+      R.block(
+        "epistemic",
+        beats[i]!.cardNumber ?? i + 1,
+        "Beat claimIds must be an array (use [] only when the beat has no material factual claim).",
+      );
+      continue;
+    }
+    for (const claimId of refs)
+      if (!claimIds.has(String(claimId)))
+        R.block(
+          "epistemic",
+          beats[i]!.cardNumber ?? i + 1,
+          `Beat references claim '${claimId}' that is missing from creativeBrief.claimLedger.`,
+        );
+  }
+
   for (let i = 0; i < Math.min(scenes.length, beats.length); i++) {
-    const s = scenes[i]!,
+    const s = scenes[i] && typeof scenes[i] === "object" ? scenes[i]! : {},
       b = beats[i]!,
       sid = s.sceneId;
+    if (!scenes[i] || typeof scenes[i] !== "object")
+      R.block("schema", sid ?? i + 1, `scenes[${i}] must be an object.`);
+    if (s.sceneId !== b.cardNumber)
+      R.block(
+        "sceneMapping",
+        sid ?? i + 1,
+        `sceneId ${s.sceneId ?? "missing"} must equal source beat cardNumber ${b.cardNumber ?? i + 1}.`,
+      );
     if (String(s.narration || "").trim() !== String(b.narration || "").trim())
       R.block(
         "sceneMapping",
         sid,
-        "Scene narration differs from its beat narration.",
+        "Scene narration differs from its corresponding beat narration.",
       );
     if (
       Number(s.estimatedDurationSeconds || 0) !==
@@ -366,20 +561,24 @@ export function validatePackage(
       R.block("sceneMapping", sid, "Scene caption differs from beat caption.");
     if (s.headerText !== title)
       R.block("schema", sid, "headerText differs from video title.");
-    if (!(s.sourceBeatIds || []).includes(b.beatId))
+    if (
+      !(s.sourceBeatIds || []).includes(b.beatId) &&
+      !(s.sourceBeatIds || []).includes(b.cardNumber)
+    )
       R.block(
         "sceneMapping",
         sid,
-        `sourceBeatIds does not include ${b.beatId}.`,
+        `sourceBeatIds does not include beat reference ${b.beatId ?? b.cardNumber}.`,
       );
     if (HTML_RE.test(JSON.stringify(s.caption || {})))
       R.block("schema", sid, "HTML tag in scene caption.");
   }
+
   for (let i = 0; i <= scenes.length - 3; i++)
-    if (scenes.slice(i, i + 3).every((s) => !s.characters)) {
+    if (scenes.slice(i, i + 3).every((s) => !s?.characters)) {
       R.block(
         "storyCraft",
-        scenes[i]!.sceneId,
+        scenes[i]?.sceneId ?? i + 1,
         "3 consecutive scenes without the protagonist (max 2).",
       );
       break;
@@ -390,9 +589,13 @@ export function validatePackage(
     R.block(
       "composition",
       null,
-      `compositionPlan has ${comp.length} items vs ${scenes.length} scenes.`,
+      `compositionPlan has ${comp.length} items vs ${scenes.length} scenes. All required composition plans must be present.`,
     );
   for (const c of comp) {
+    if (!c || typeof c !== "object") {
+      R.block("composition", null, "Every compositionPlan entry must be an object.");
+      continue;
+    }
     const keys = new Set(Object.keys(c)),
       bad = [...OLD_COMP_KEYS].filter((k) => keys.has(k)),
       missing = [...REQ_COMP_KEYS].filter((k) => !keys.has(k));
@@ -422,13 +625,13 @@ export function validatePackage(
   }
 
   // 5. Visual prompts
-  const compIds = new Set(comp.map((c) => c.sceneId)),
-    visualIds = new Set(vp.map((v) => v.sceneId));
+  const compIds = new Set(comp.map((c) => c?.sceneId)),
+    visualIds = new Set(vp.map((v) => v?.sceneId));
   if (vp.length !== scenes.length)
     R.block(
       "visualPrompts",
       null,
-      `${vp.length} prompts vs ${scenes.length} scenes.`,
+      `${vp.length} visual prompts vs ${scenes.length} scenes. All required visual prompts must be present.`,
     );
   if (
     (comp.length > 0 && !sameSet(compIds, new Set(sceneIds))) ||
@@ -439,8 +642,12 @@ export function validatePackage(
       null,
       "sceneId sets/types differ across scenes, compositionPlan, visualPrompts.",
     );
-  const byId = new Map(scenes.map((s) => [s.sceneId, s]));
+  const byId = new Map(scenes.map((s) => [s?.sceneId, s]));
   for (const v of vp) {
+    if (!v || typeof v !== "object") {
+      R.block("visualPrompts", null, "Every visual prompt entry must be an object.");
+      continue;
+    }
     const sid = v.sceneId,
       p = String(v.prompt || "");
     for (const m of p.matchAll(QUOTED_RE))
