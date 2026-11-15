@@ -7,6 +7,8 @@ export async function artDirectionAgent(input: string) {
 
       task: "imagePrompt",
 
+      temperature: 0.5,
+
       role: `
 You are an expert film art director and cinematic AI image-prompt specialist.
 

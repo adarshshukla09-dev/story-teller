@@ -5,6 +5,7 @@ export async function visualDirectorAgent(input: string) {
     {
       name: "Visual Director",
       task: "imagePrompt",
+      temperature: 0.4,
       role: `
 Convert the supplied {storyboard, compositionPlan, productionBible} into canonical VisualPrompt
 objects. Follow the visual-director skill and PIPELINE_CONTRACTS exactly.

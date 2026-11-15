@@ -1,109 +1,103 @@
 import "dotenv/config";
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-
+import { ChatOllama } from "@langchain/ollama";
+import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { getSkills, type TaskType } from "../skills/manger/skills-manger.js";
+import { envNumber, logEvent } from "../lib/run-context.js";
 
 // ===============================
 // MODEL CONFIGURATION
 // ===============================
 
-const model = new ChatGoogleGenerativeAI({
-  model: "gemini-3.1-flash-lite",
-  apiKey: process.env.GEMINI_API_KEY!,
-  temperature: 0.7,
-});
+const DEFAULT_TEMPERATURE = 0.7;
+
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "gemma4:e2b";
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+
+const models = new Map<number, ChatOllama>();
+
+function getModel(temperature: number): ChatOllama {
+  let model = models.get(temperature);
+
+  if (!model) {
+    model = new ChatOllama({
+      model: OLLAMA_MODEL,
+      baseUrl: OLLAMA_BASE_URL,
+      temperature,
+      numPredict: envNumber("OLLAMA_MAX_OUTPUT_TOKENS", 8192),
+    });
+
+    models.set(temperature, model);
+  }
+
+  return model;
+}
 
 // ===============================
-// RATE LIMIT CONFIGURATION
+// RATE LIMITING
 // ===============================
 
-const MAX_RPM = 10;
-const MAX_RPD = 1000;
+// Ollama runs locally, so provider API quotas are unnecessary.
+// Keep optional throttling to control local resource usage.
 
-const REQUEST_DELAY = 6000;
-
-const MINUTE = 60 * 1000;
-const DAY = 24 * 60 * 60 * 1000;
-
-// ===============================
-// RATE LIMIT TRACKING
-// ===============================
+const REQUEST_DELAY = envNumber("OLLAMA_MIN_DELAY_MS", 0);
 
 let lastRequestTime = 0;
-
-const requestsThisMinute: number[] = [];
-const requestsToday: number[] = [];
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-// ===============================
-// RATE LIMIT HANDLER
-// ===============================
-
 async function waitForRateLimit(): Promise<void> {
-  while (true) {
-    const now = Date.now();
+  const elapsed = Date.now() - lastRequestTime;
 
-    // Clean expired RPM requests.
-    while (
-      requestsThisMinute.length > 0 &&
-      now - requestsThisMinute[0]! >= MINUTE
-    ) {
-      requestsThisMinute.shift();
-    }
-
-    // Clean expired RPD requests.
-    while (requestsToday.length > 0 && now - requestsToday[0]! >= DAY) {
-      requestsToday.shift();
-    }
-
-    // Check daily quota.
-    if (requestsToday.length >= MAX_RPD) {
-      const oldestRequest = requestsToday[0]!;
-
-      const waitTime = DAY - (now - oldestRequest);
-
-      console.log(
-        `Daily quota reached. Waiting ${Math.ceil(waitTime / 1000)} seconds.`,
-      );
-
-      await delay(waitTime);
-      continue;
-    }
-
-    // Check RPM quota.
-    if (requestsThisMinute.length >= MAX_RPM) {
-      const oldestRequest = requestsThisMinute[0]!;
-
-      const waitTime = MINUTE - (now - oldestRequest);
-
-      console.log(
-        `RPM limit reached. Waiting ${Math.ceil(waitTime / 1000)} seconds.`,
-      );
-
-      await delay(waitTime);
-      continue;
-    }
-
-    // Check minimum request delay.
-    const elapsed = now - lastRequestTime;
-
-    if (elapsed < REQUEST_DELAY) {
-      await delay(REQUEST_DELAY - elapsed);
-      continue;
-    }
-
-    // Register request.
-    const requestTime = Date.now();
-
-    requestsThisMinute.push(requestTime);
-    requestsToday.push(requestTime);
-
-    lastRequestTime = requestTime;
-
-    return;
+  if (elapsed < REQUEST_DELAY) {
+    await delay(REQUEST_DELAY - elapsed);
   }
+
+  lastRequestTime = Date.now();
+}
+
+// ===============================
+// TEST SEAM
+// ===============================
+
+export interface ChatMessage {
+  role: "system" | "user";
+  content: string;
+}
+
+export type ModelInvoker = (
+  messages: ChatMessage[],
+  options: {
+    temperature: number;
+    signal: AbortSignal;
+    agent: string;
+  },
+) => Promise<string>;
+
+let customInvoker: ModelInvoker | null = null;
+
+export function setModelInvoker(invoker: ModelInvoker | null): void {
+  customInvoker = invoker;
+}
+
+function contentToText(content: unknown): string {
+  if (typeof content === "string") return content;
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part;
+
+        if (part && typeof part === "object" && "text" in part) {
+          return String((part as { text?: unknown }).text ?? "");
+        }
+
+        return "";
+      })
+      .join("");
+  }
+
+  return JSON.stringify(content);
 }
 
 // ===============================
@@ -114,6 +108,7 @@ interface AgentConfig {
   name: string;
   role: string;
   task: TaskType;
+  temperature?: number;
 }
 
 // ===============================
@@ -124,39 +119,32 @@ export async function runAgent(
   config: AgentConfig,
   input: string,
 ): Promise<string> {
-  console.log(`\n🚀 Starting Agent: ${config.name}`);
-
-  // Step 1: Load skills
-  console.time(`${config.name} - Skills`);
+  logEvent("agent.start", {
+    agent: config.name,
+    model: OLLAMA_MODEL,
+  });
 
   const skills = await getSkills(config.task);
 
-  console.timeEnd(`${config.name} - Skills`);
+  const configuredAttempts = envNumber("AGENT_MAX_ATTEMPTS", 1);
 
-  // Step 2: Rate limit
-  console.log(`⏳ ${config.name}: Checking rate limits...`);
+  const maxAttempts = Math.min(5, Math.max(1, Math.floor(configuredAttempts)));
 
-  await waitForRateLimit();
+  const timeoutMs = envNumber("AGENT_TIMEOUT_MS", 180_000);
 
-  // Step 3: Gemini request
-  console.log(`🤖 ${config.name}: Sending request to Gemini...`);
+  const temperature = config.temperature ?? DEFAULT_TEMPERATURE;
 
-  console.time(`${config.name} - Gemini`);
-
-  try {
-    const response = await model.invoke([
-      {
-        role: "system",
-        content: `
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `
 You are ${config.name}.
 
 YOUR ROLE:
 ${config.role}
 
 YOUR SPECIALIZED KNOWLEDGE:
-
-Follow the filmmaking methodologies,
-instructions and workflows provided below.
+Follow the filmmaking methodologies, instructions and workflows provided below.
 
 ACTIVE SKILLS:
 ${skills}
@@ -166,27 +154,80 @@ RULES:
 - Use the supplied skills.
 - Do not perform another agent's responsibilities.
 - Produce structured, useful outputs.
-- Do not invent information when clarification is needed.
+- Treat the user's topic as a title, not as a complete brief.
 `,
-      },
-      {
-        role: "user",
-        content: input,
-      },
-    ]);
+    },
+    {
+      role: "user",
+      content: input,
+    },
+  ];
 
-    console.timeEnd(`${config.name} - Gemini`);
+  let lastError: unknown;
+  let attemptsUsed = 0;
 
-    console.log(`✅ ${config.name}: Completed successfully`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    attemptsUsed = attempt;
 
-    return typeof response.content === "string"
-      ? response.content
-      : JSON.stringify(response.content);
-  } catch (error) {
-    console.timeEnd(`${config.name} - Gemini`);
+    try {
+      await waitForRateLimit();
 
-    console.error(`❌ Agent ${config.name} failed:`, error);
+      const startedAt = performance.now();
 
-    throw error;
+      const signal = AbortSignal.timeout(timeoutMs);
+
+      const text = customInvoker
+        ? await customInvoker(messages, {
+            temperature,
+            signal,
+            agent: config.name,
+          })
+        : contentToText(
+            (
+              await getModel(temperature).invoke(
+                messages.map((message) =>
+                  message.role === "system"
+                    ? new SystemMessage(message.content)
+                    : new HumanMessage(message.content),
+                ),
+                { signal },
+              )
+            ).content,
+          );
+
+      logEvent("agent.success", {
+        agent: config.name,
+        model: OLLAMA_MODEL,
+        attempt,
+        durationMs: Math.round(performance.now() - startedAt),
+        chars: text.length,
+      });
+
+      return text;
+    } catch (error) {
+      lastError = error;
+
+      const message = error instanceof Error ? error.message : String(error);
+
+      logEvent("agent.failure", {
+        agent: config.name,
+        model: OLLAMA_MODEL,
+        attempt,
+        error: message.slice(0, 500),
+      });
+
+      if (attempt >= maxAttempts) break;
+
+      const backoff = Math.min(30_000, 1000 * 2 ** (attempt - 1));
+
+      await delay(backoff);
+    }
   }
+
+  throw new Error(
+    `Agent ${config.name} failed after ${attemptsUsed} attempt(s)`,
+    {
+      cause: lastError,
+    },
+  );
 }

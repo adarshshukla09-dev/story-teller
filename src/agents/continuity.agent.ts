@@ -5,6 +5,7 @@ export async function continuityAgent(production: string) {
     {
       name: "Continuity Supervisor",
       task: "continuity",
+      temperature: 0.3,
 
       role: `
 You are responsible for visual continuity.

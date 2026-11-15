@@ -5,6 +5,7 @@ export async function compositionPlannerAgent(input: string) {
     {
       name: "Illustrated Visual Composition Designer",
       task: "composition",
+      temperature: 0.3,
       role: `
 Convert every canonical storyboard Scene into exactly one spatial CompositionPlan.
 Follow shared PIPELINE_CONTRACTS and composition skill. Input is {scenes, visualStyle}.

@@ -28,7 +28,11 @@ export const STAGE_TO_NODE: Record<Stage, string> = {
   visualPrompts: "visualDirector",
 };
 
-export const MAX_REVISIONS = 3;
+// Keep the retry budget finite even if an environment variable is misconfigured.
+const configuredRevisions = Number(process.env.MAX_REVISIONS);
+export const MAX_REVISIONS = Number.isFinite(configuredRevisions)
+  ? Math.min(3, Math.max(0, Math.floor(configuredRevisions)))
+  : 3;
 
 export function isStage(v: unknown): v is Stage {
   return typeof v === "string" && (STAGE_ORDER as string[]).includes(v);
@@ -43,15 +47,25 @@ export function stageForIssue(issue: Issue): Stage {
     case "wordCount":
     case "timing":
     case "storyChain":
-    case "epistemic":
     case "caption":
     case "pacing":
       return "script";
     case "storyCraft":
       return /scene/i.test(issue.problem) ? "storyboard" : "script";
     case "sceneMapping":
-    case "schema":
       return "storyboard";
+    case "schema":
+      if (/script\.beats|script\.title|beatId|cardNumber/i.test(issue.problem))
+        return "script";
+      return "storyboard";
+    case "epistemic":
+      if (
+        /claimLedger|claim .*sourceId|source .*absent from researchDossier/i.test(
+          issue.problem,
+        )
+      )
+        return "brief";
+      return "script";
     case "composition":
       return "composition";
     case "continuity":
@@ -94,7 +108,7 @@ export function buildFeedback(
     shown.push(
       `- ...and ${lines.length - shown.length} more of the same kinds.`,
     );
-  for (const ins of instructions.slice(0, 10))
+  for (const ins of instructions.slice(0, 15))
     shown.push(`- INSTRUCTION: ${ins}`);
   return shown.join("\n");
 }
@@ -122,9 +136,20 @@ const countWords = (t: unknown) =>
  */
 export function normalizeScript(script: any): any {
   if (!script || !Array.isArray(script.beats)) return script;
-  const beats = script.beats.map((b: any) => {
+  const beats = script.beats.map((rawBeat: any, index: number) => {
+    const b = rawBeat && typeof rawBeat === "object" ? rawBeat : {};
     const narration = String(b.narration ?? "").trim();
-    return { ...b, narration, wordCount: countWords(narration) };
+    const ordinal = String(index + 1).padStart(2, "0");
+    return {
+      ...b,
+      beatId:
+        typeof b.beatId === "string" && b.beatId.trim()
+          ? b.beatId
+          : `B${ordinal}`,
+      cardNumber: Number.isInteger(b.cardNumber) ? b.cardNumber : index + 1,
+      narration,
+      wordCount: countWords(narration),
+    };
   });
   const durationSum = beats.reduce(
     (n: number, b: any) => n + Number(b.estimatedDurationSeconds || 0),
@@ -148,6 +173,7 @@ export async function qaAgent(input: string) {
     {
       name: "Explainer QA Gatekeeper",
       task: "qa",
+      temperature: 0.1,
       role: `
 You are the independent QA gatekeeper for an illustrated 9:16 explainer video.
 
@@ -155,8 +181,26 @@ Your input is a JSON object: { "package": {...}, "validatorReport": {...} }.
 validatorReport is the output of the deterministic validate_package check. Treat it as already run:
 copy its numbers verbatim, never recompute or soften them, and never override a blocking issue.
 
-Perform the judgment layer from the QA skill: factReview, analogyReview, depictionReview,
-story craft, and a decision for every validator reviewItem.
+CRITICAL CREATIVE EVALUATION RULES:
+Keep technical validation strictly separate from creative quality. Evaluate and score each of the following 10 creative dimensions separately on a 1-10 scale using evidence from the package:
+1. Hook and curiosity
+2. Narrative structure
+3. Central idea clarity
+4. Cause-and-effect progression
+5. Emotional engagement
+6. Analogy quality
+7. Visual storytelling
+8. Aha moment
+9. Factual accuracy
+10. Ending and memorability
+
+- A 9 or 10 is exceptional, not a compliance reward.
+- Give a concrete reason (concise rationale and concrete weakness) for EVERY score below 9.
+- Calculate the arithmetic mean across all ten dimensions on the 1-10 scale (do not round up; report to one decimal place). creativeScores.average must be on the 1-10 scale, not a percentage. If evidence is insufficient, mark the dimension 'unscored' and do not fabricate a mean.
+- Confirm that material factual claims in narration/captions cite valid claim IDs from the brief and that those claims map to real research-dossier source IDs. Flag unsupported, disputed-without-qualification, or invented sources as factual blockers.
+- Identify the three weakest dimensions and give minimal, actionable changes for the responsible stage; preserve sections that already work.
+- A technically valid schema is not evidence of creative excellence. Do not lower a score merely because revision budget is exhausted, and never claim the deterministic validator passed if it did not.
+- Ensure technical release gates (factual errors, missing reports, validation blockers) are evaluated independently from creative quality scores.
 
 Return ONLY one valid JSON object following the QA skill's Output Contract.
 No markdown fences, no text outside the JSON, no comments, no trailing commas.
