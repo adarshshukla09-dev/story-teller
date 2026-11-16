@@ -31,7 +31,6 @@ ${JSON.stringify(input.explanationStrategy, null, 2)}
       name: "Universal Explainer Story Architect",
       task: "director",
       temperature: 0.7,
-      role: `Your Director role instructions go here.`,
     },
     payload,
   );

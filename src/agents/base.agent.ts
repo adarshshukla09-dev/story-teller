@@ -96,6 +96,15 @@ export const AGENT_POLICIES: Partial<Record<TaskType, AgentPolicy>> = {
     maxAttempts: 1,
   },
 
+  svgIllustration: {
+    model: STRONG_MODEL,
+    temperature: 0.35,
+    maxOutputTokens: 7000,
+    contextTokens: STRONG_CONTEXT,
+    timeoutMs: 240000,
+    maxAttempts: 2,
+  },
+
   renderer: {
     model: BALANCED_MODEL,
     temperature: 0.5,
@@ -117,9 +126,13 @@ export const AGENT_POLICIES: Partial<Record<TaskType, AgentPolicy>> = {
   strategy: {
     model: STRONG_MODEL,
     temperature: 0.5,
-    maxOutputTokens: 1800,
+    // This stage only needs a compact plan. A smaller completion avoids very
+    // slow, overlong generations on local 4B models.
+    maxOutputTokens: 1200,
     contextTokens: 16384,
-    timeoutMs: 300000,
+    // Fail over promptly on slow local inference; strategyNode supplies a
+    // dossier-based fallback when this deadline is reached.
+    timeoutMs: envNumber("STRATEGY_TIMEOUT_MS", 120000),
     maxAttempts: 1,
   },
 
@@ -128,8 +141,10 @@ export const AGENT_POLICIES: Partial<Record<TaskType, AgentPolicy>> = {
     temperature: 0.7,
     maxOutputTokens: 4000,
     contextTokens: STRONG_CONTEXT,
-    timeoutMs: 240000,
-    maxAttempts: 2,
+    // Director has a dossier-based fallback in directorNode; don't spend
+    // eight minutes retrying the same slow local generation.
+    timeoutMs: envNumber("DIRECTOR_TIMEOUT_MS", 120000),
+    maxAttempts: 1,
   },
 
   script: {
@@ -377,18 +392,13 @@ function contentToText(content: unknown): string {
 
 export interface AgentConfig {
   name: string;
-  role: string;
   task: TaskType;
   temperature?: number;
-  /** Per-agent model tag. Overrides AGENT_POLICIES and OLLAMA_MODEL. */
+
   model?: string;
-  /** Per-agent output cap. Overrides AGENT_POLICIES. */
   maxOutputTokens?: number;
-  /** Per-agent context window size. Overrides AGENT_POLICIES. */
   contextTokens?: number;
-  /** Optional per-agent deadline; useful for bounded batch generation. */
   timeoutMs?: number;
-  /** Number of low-level model attempts; outer JSON repair is handled by callJson. */
   maxAttempts?: number;
 }
 
@@ -418,29 +428,34 @@ export async function runAgent(
 
   const skills = await getCachedSkills(config.task);
 
-  const systemPrompt = `You are ${config.name}.
+  const systemPrompt = `
+You are an AI agent operating as: ${config.name}
 
-YOUR ROLE:
-${config.role}
-
-YOUR SPECIALIZED KNOWLEDGE:
-Follow the filmmaking methodologies, instructions and workflows provided below.
+YOUR INSTRUCTIONS:
+Follow the assigned skills below as your authoritative task instructions.
 
 ACTIVE SKILLS:
 ${skills}
 
-RULES:
-- Follow your assigned role.
-- Use the supplied skills.
+EXECUTION RULES:
+- Follow the assigned skills and their output contracts.
 - Do not perform another agent's responsibilities.
-- Treat the input as the authoritative payload for your assigned task.
-- Use only the context actually supplied.
-- Do not assume missing research, strategy, or upstream artifacts exist.
-- Produce structured, useful outputs.`;
-
+- Treat the supplied input as the authoritative payload for your task.
+- Use only information available in the supplied context.
+- Never invent missing research, evidence, sources, or upstream artifacts.
+- Respect all schemas, constraints, and formatting requirements defined by your skills.
+- Return the exact output format required by your assigned skills.
+`;
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
-    { role: "user", content: input },
+    {
+      // Qwen3 models otherwise spend substantial time in hidden reasoning on
+      // this JSON planning task. Keep this opt-in narrowly scoped to Qwen3.
+      role: "user",
+      content: /^qwen3(?::|$)/i.test(policy.model)
+        ? `/no_think\n${input}`
+        : input,
+    },
   ];
 
   const inputCharacters = systemPrompt.length + input.length;

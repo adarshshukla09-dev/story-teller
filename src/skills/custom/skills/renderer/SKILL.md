@@ -1,16 +1,3 @@
-# Shared production authority
-
-This skill participates in one production pipeline. Apply the shared documents below before local instructions. In a conflict, the shared contract wins; report an unresolvable conflict rather than silently translating a field.
-
-- `src/skills/custom/skills/STORYTELLING_STANDARD.md` — narrative decisions and cognitive/visual storytelling.
-- `src/skills/custom/skills/PIPELINE_CONTRACTS.md` — canonical artifact fields, IDs, ownership, and adapters.
-- `src/skills/custom/skills/QUALITY_RUBRIC.md` — creative scoring and release gates.
-- `src/skills/custom/skills/REVISION_PROTOCOL.md` — targeted revision and stale-artifact rules.
-
-Global invariants: minimalist illustrated documentary explainer; vertical 9:16; text-free generated artwork; programmatic typography/overlays; one visual idea per scene; factual claims traceable to sources; no unsupported visual invention. Technical validity and creative quality are separate decisions.
-
----
-
 ---
 name: explainer-renderer
 description: Assemble approved illustration cards, programmatic overlays, deterministic typography, voiceover audio, and restrained transitions into a finished 9:16 explainer video.

@@ -30,10 +30,20 @@ export const skillRegistry = {
     { repository: "custom", name: "storyboard" },
     { repository: "custom", name: "storycraft" },
   ],
+  // skills-registry.ts
+
+  artDirection: [
+    { repository: "custom", name: "reference-video-style" },
+    { repository: "custom", name: "art-direction" },
+  ],
 
   imagePrompt: [
     { repository: "custom", name: "reference-video-style" },
     { repository: "custom", name: "visual-director" },
+  ],
+  svgIllustration: [
+    { repository: "custom", name: "reference-video-style" },
+    { repository: "custom", name: "svg-illustrator" },
   ],
 
   continuity: [

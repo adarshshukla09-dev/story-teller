@@ -1,16 +1,3 @@
-# Shared production authority
-
-This skill participates in one production pipeline. Apply the shared documents below before local instructions. In a conflict, the shared contract wins; report an unresolvable conflict rather than silently translating a field.
-
-- `src/skills/custom/skills/STORYTELLING_STANDARD.md` — narrative decisions and cognitive/visual storytelling.
-- `src/skills/custom/skills/PIPELINE_CONTRACTS.md` — canonical artifact fields, IDs, ownership, and adapters.
-- `src/skills/custom/skills/QUALITY_RUBRIC.md` — creative scoring and release gates.
-- `src/skills/custom/skills/REVISION_PROTOCOL.md` — targeted revision and stale-artifact rules.
-
-Global invariants: minimalist illustrated documentary explainer; vertical 9:16; text-free generated artwork; programmatic typography/overlays; one visual idea per scene; factual claims traceable to sources; no unsupported visual invention. Technical validity and creative quality are separate decisions.
-
----
-
 ---
 name: explainer-qa
 description: Independent quality gate for an illustrated explainer package (brief, script, storyboard, compositionPlan, visualPrompts, productionBible). Use before image generation and again after images exist. Runs a deterministic validator first, then reviews technical accuracy, analogy fidelity, and storytelling. Status is derived mechanically from blocking issues; it never passes a package with a blocking defect.
@@ -176,8 +163,8 @@ Return valid JSON only, no commentary:
 
 `blockingIssues` includes every validator blocking issue (grouped by gate if there are many identical ones) plus your own. If `blockingIssues` is non-empty the status must be `revise`.
 
-
 ## Creative quality scorecard (required)
+
 Evaluate the ten dimensions in `../QUALITY_RUBRIC.md` on a 1–10 scale and report their arithmetic mean on the same 1–10 scale: hook/curiosity, narrative structure,
 central-idea clarity, cause/effect progression, emotional engagement, analogy fidelity,
 visual storytelling, aha/payoff, factual accuracy, and ending/memorability.
@@ -188,11 +175,11 @@ separately from creative quality. The release gates in the shared rubric are man
 A creative average of 8.5/10 is the target; 9/10 is exceptional. Neither target may alter the evidence-based score.
 
 ## Revision specificity
+
 Every blocking issue must identify the affected artifact and exact field/scene/beat, state the
 observable defect, and prescribe a minimal concrete correction. When upstream material changes,
 name every downstream artifact that is stale using `REVISION_PROTOCOL.md`. After a revision,
 inspect the revised artifact and use the validator's new report; never carry forward a prior pass.
-
 
 When the average is below 8.5 and there is a specific, achievable improvement, set `status:"revise"`
 and route to the earliest responsible stage. Do not manufacture revisions for subjective preference

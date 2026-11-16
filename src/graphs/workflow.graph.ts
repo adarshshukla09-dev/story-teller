@@ -10,6 +10,7 @@ import {
   comprehensionNode,
   storyboardNode,
   visualNode,
+  svgIllustrationNode,
   compositionNode,
   visualStyleNode,
   continuityNode,
@@ -17,7 +18,7 @@ import {
 } from "./workflow.node.js";
 import { isStage, MAX_REVISIONS, STAGE_TO_NODE } from "../agents/QA.agent.js";
 
-const NODES_PER_PASS = 12;
+const NODES_PER_PASS = 13;
 const MAX_PASSES = MAX_REVISIONS + 1;
 export const RECURSION_LIMIT = Math.max(25, NODES_PER_PASS * MAX_PASSES + 5);
 
@@ -32,6 +33,7 @@ const workflow = new StateGraph(FilmState)
   .addNode("compositionPlanner", compositionNode)
   .addNode("continuity", continuityNode)
   .addNode("visualDirector", visualNode)
+  .addNode("svgIllustrator", svgIllustrationNode)
   .addNode("qa", qaNode)
   .addNode("artDirection", visualStyleNode)
 
@@ -52,11 +54,13 @@ const workflow = new StateGraph(FilmState)
   .addEdge(["compositionPlanner", "continuity"], "visualDirector")
 
   // QA Gate
-  .addEdge("visualDirector", "qa")
+  .addEdge("visualDirector", "svgIllustrator")
+  .addEdge("svgIllustrator", "artDirection")
+  .addEdge("artDirection", "qa")
   .addConditionalEdges(
     "qa",
     (state) => {
-      if (state.qualityStatus === "pass") return "artDirection";
+      if (state.qualityStatus === "pass") return "end";
       if (state.revisionCount >= MAX_REVISIONS) return "end";
       if (!isStage(state.reviseTarget)) return "end";
 
@@ -68,15 +72,14 @@ const workflow = new StateGraph(FilmState)
     },
     {
       end: END,
-      artDirection: "artDirection",
       director: "director",
       scriptwriter: "scriptwriter",
       storyboardGenerator: "storyboardGenerator",
       compositionPlanner: "compositionPlanner",
       continuity: "continuity",
       visualDirector: "visualDirector",
+      svgIllustrator: "svgIllustrator",
     },
-  )
-  .addEdge("artDirection", END);
+  );
 
 export const filmGraph = workflow.compile();

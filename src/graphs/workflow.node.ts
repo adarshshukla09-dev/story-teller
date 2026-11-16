@@ -12,6 +12,7 @@ import { comprehensionAgent } from "../agents/comprehension.agent.js";
 import { scriptwriterAgent } from "../agents/scriptwriter.agent.js";
 import { storyboardAgent } from "../agents/storyboard.agent.js";
 import { visualDirectorAgent } from "../agents/visual-director.agent.js";
+import { svgIllustratorAgent } from "../agents/svg-illustrator.agent.js";
 import { continuityAgent } from "../agents/continuity.agent.js";
 import {
   buildFeedback,
@@ -25,10 +26,10 @@ import {
 } from "../agents/QA.agent.js";
 import { compositionPlannerAgent } from "../agents/compositionPlannerAgent.agent.js";
 import { artDirectionAgent } from "../agents/artDirectionAgent.agent.js";
-import { renderSceneSvg } from "../services/svg-renderer.service.js";
 
 import { validatePackage } from "../skills/custom/skills/qa/validate_package.js";
 import { envNumber, logEvent } from "../lib/run-context.js";
+import { validateSvgArtwork } from "../services/svg-renderer.service.js";
 import type { Script } from "../schema/script.schema.js";
 import type { Storyboard } from "../schema/storyboard.schema.js";
 
@@ -145,8 +146,8 @@ async function callJson<T = any>(
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const raw = await run(prompt);
     try {
+      const raw = await run(prompt);
       const parsed = parseAgentJson<T>(raw);
       // Deterministic repair of fields the application owns (see reconcileStoryboardBatch).
       // Runs before validation, so validation checks the final, repaired artifact.
@@ -220,15 +221,74 @@ export async function researchNode(state: typeof FilmState.State) {
 }
 
 export async function strategyNode(state: typeof FilmState.State) {
-  const { data } = await callJson(
-    "strategy",
-    strategyAgent,
-    JSON.stringify({
-      topic: state.topic,
-      researchDossier: state.researchDossier,
-    }),
-  );
-  return { explanationStrategy: data };
+  try {
+    const { data } = await callJson(
+      "strategy",
+      strategyAgent,
+      JSON.stringify({
+        topic: state.topic,
+        researchDossier: state.researchDossier,
+      }),
+    );
+    return { explanationStrategy: data };
+  } catch (error) {
+    const reason = shortReason(error);
+    if (!/timeout|exceeded\s+\d+\s*ms|aborted/i.test(reason)) throw error;
+
+    // Keep a slow local model from discarding the entire run. This fallback
+    // carries the research agent's own concepts into the Director stage.
+    const dossier = (state.researchDossier ?? {}) as Record<string, any>;
+    const concepts = asArray<any>(dossier.conceptMap ?? dossier.prerequisites)
+      .map((item) =>
+        typeof item === "string"
+          ? item
+          : String(item?.concept ?? item?.name ?? item?.description ?? ""),
+      )
+      .filter(Boolean)
+      .slice(0, 5);
+    const misconceptions = asArray<any>(dossier.misconceptions)
+      .map((item) =>
+        typeof item === "string"
+          ? item
+          : String(item?.misconception ?? item?.claim ?? item?.description ?? ""),
+      )
+      .filter(Boolean)
+      .slice(0, 4);
+    const coreIdea = String(
+      dossier.onePortableIdea ?? `Explain the central idea behind ${state.topic}.`,
+    );
+
+    logEvent("strategy.fallback", {
+      reason,
+      concepts: concepts.length,
+      misconceptions: misconceptions.length,
+    });
+
+    return {
+      explanationStrategy: {
+        domain: dossier.domain ?? "General",
+        selectedFormat: /paradox/i.test(state.topic) ? "Paradox" : "Mechanism",
+        rationale: "Fallback plan built from the research dossier after strategy generation timed out.",
+        audienceModel: dossier.audienceAssumptions ?? "Curious beginner; explain terms before using them.",
+        learningObjectives: [coreIdea],
+        conceptSequence: concepts.length ? concepts : [coreIdea],
+        misconceptionPlan: misconceptions,
+        analogyPlan: {
+          useAnalogy: false,
+          decision: "Prefer direct explanation or a diagram unless a faithful analogy is clear.",
+          limits: "Do not let a metaphor replace the researched mechanism.",
+        },
+        narrativeBeats: [
+          "Open with the viewer's central question.",
+          ...concepts.slice(0, 3).map((concept) => `Explain: ${concept}`),
+          `Resolve with the central idea: ${coreIdea}`,
+        ].slice(0, 5),
+        visualApproach: "Use direct depiction, a comparison, or a simple process diagram that matches the topic.",
+        comprehensionChecks: ["Can the viewer explain the central idea in one sentence?"],
+        domainGuardrails: asArray(dossier.domainSafetyNotes ?? dossier.disputedOrUncertainPoints),
+      },
+    };
+  }
 }
 
 export async function directorNode(state: typeof FilmState.State) {
@@ -243,25 +303,97 @@ export async function directorNode(state: typeof FilmState.State) {
     "brief",
   );
 
-  const { data } = await callJson(
-    "director",
-    (prompt: string) => {
-      // Safely bridge string-based callJson retries with directorAgent's structured input
-      try {
-        const parsed = JSON.parse(prompt);
-        return directorAgent(parsed);
-      } catch {
-        return directorAgent({
-          ...basePayload,
-          feedback: prompt,
-        } as any);
-      }
-    },
-    directorPrompt,
-  );
+  try {
+    const { data } = await callJson(
+      "director",
+      (prompt: string) => {
+        // Safely bridge string-based callJson retries with directorAgent's structured input
+        try {
+          const parsed = JSON.parse(prompt);
+          return directorAgent(parsed);
+        } catch {
+          return directorAgent({
+            ...basePayload,
+            feedback: prompt,
+          } as any);
+        }
+      },
+      directorPrompt,
+    );
 
-  // Stored as an object, not a JSON string, so every later stage and the validator read the same data.
-  return { creativeBrief: data };
+    // Stored as an object, not a JSON string, so every later stage and the validator read the same data.
+    return { creativeBrief: data };
+  } catch (error) {
+    const reason = shortReason(error);
+    if (!/timeout|exceeded\s+\d+\s*ms|aborted/i.test(reason)) throw error;
+
+    const dossier = (state.researchDossier ?? {}) as Record<string, any>;
+    const strategy = asObject<Record<string, any>>(state.explanationStrategy);
+    const oneIdea = String(
+      dossier.onePortableIdea ?? `Explain the central idea behind ${state.topic}.`,
+    );
+    const conceptList = asArray<any>(dossier.conceptMap ?? dossier.prerequisites)
+      .map((item) =>
+        typeof item === "string"
+          ? item
+          : String(item?.concept ?? item?.name ?? item?.description ?? ""),
+      )
+      .filter(Boolean)
+      .slice(0, 4);
+    const claims = asArray<any>(dossier.claims).slice(0, 8).map((claim, index) => ({
+      id: String(claim?.id ?? `UNVERIFIED_${index + 1}`),
+      safeWording: String(claim?.claim ?? ""),
+      status: "simplified",
+      confidence: "unverified",
+      epistemicStatus: "unverified",
+      needsVerification: true,
+      ...(claim?.sourceId ? { sourceId: claim.sourceId } : {}),
+    }));
+    const stages = ["Hook", "Question", "Mechanism", "Aha", "Payoff"];
+    const beatMap = stages.map((stage, index) => ({
+      cardNumber: index + 1,
+      stage,
+      connector: index === 0 ? "START" : index === 1 ? "BUT" : "THEREFORE",
+      purpose: [
+        "Open the viewer's central question.",
+        "Establish the key context or misconception.",
+        "Explain the researched concept sequence.",
+        "Synthesize how the explanation resolves the question.",
+        "State the takeaway and its important boundary.",
+      ][index],
+      claimIds: [],
+      isAhaCard: index === 3,
+    }));
+
+    logEvent("director.fallback", { reason, claims: claims.length });
+    return {
+      creativeBrief: {
+        videoTitle: String(state.topic).trim().toUpperCase().slice(0, 48),
+        oneIdea,
+        domainClassification: dossier.domain ?? "General explainer",
+        mechanism: conceptList.join(" → ") || oneIdea,
+        conceptsToCover: conceptList.length ? conceptList : [oneIdea],
+        analogyMap: [],
+        whereAnalogyBreaks: "No analogy selected; use direct depiction or a diagram unless research supports a faithful mapping.",
+        protagonist: "No protagonist required; follow the idea or process directly.",
+        visualStrategy: strategy.visualApproach ?? "Direct depiction, comparison, or simple process diagram.",
+        estimatedCardCount: beatMap.length,
+        durationTargetSeconds: 60,
+        beatMap,
+        claimLedger: claims.length
+          ? claims
+          : [{
+              id: "UNVERIFIED_CORE",
+              safeWording: oneIdea,
+              status: "simplified",
+              confidence: "unverified",
+              epistemicStatus: "unverified",
+              needsVerification: true,
+            }],
+        domainGuardrails: asArray(dossier.domainSafetyNotes ?? dossier.disputedOrUncertainPoints),
+      },
+    };
+  }
 }
 
 export async function scriptNode(state: typeof FilmState.State) {
@@ -725,7 +857,9 @@ export async function visualStyleNode(state: typeof FilmState.State) {
       "artDirection",
       artDirectionAgent,
       JSON.stringify({
-        compositions: state.visualPrompts,
+        scenes: state.scenes,
+        visualPrompts: state.visualPrompts,
+        svgAssets: state.svgAssets,
         visualStyle: state.visualStyle,
         productionBible: state.productionBible,
       }),
@@ -815,10 +949,6 @@ export async function visualNode(state: typeof FilmState.State) {
 
     return {
       ...item,
-      svg: renderSceneSvg(
-        matchingScene,
-        state.productionBible?.videoTitle || "PARADOX OF PROGRESS",
-      ),
       textOverlays: {
         header: matchingScene.headerText ?? item.textOverlays?.header ?? null,
         captionLine1:
@@ -844,6 +974,55 @@ export async function visualNode(state: typeof FilmState.State) {
   return { visualPrompts: lockedPrompts };
 }
 
+
+export async function svgIllustrationNode(state: typeof FilmState.State) {
+  if (!state.scenes.length || !state.visualPrompts.length || !state.compositionPlan.length || !state.productionBible) {
+    return {
+      svgAssets: [],
+      svgIssues: ["SVG Illustrator is missing scenes, visual prompts, composition plans, or productionBible."],
+    };
+  }
+
+  const input = JSON.stringify({
+    scenes: state.scenes,
+    visualPrompts: state.visualPrompts,
+    compositionPlan: state.compositionPlan,
+    productionBible: state.productionBible,
+  });
+
+  try {
+    const { data } = await callJson<{ svgAssets?: any[] }>(
+      "svgIllustrator",
+      svgIllustratorAgent,
+      withFeedback(input, state, "svgIllustrations"),
+      1,
+      (candidate) => {
+        if (!candidate || !Array.isArray(candidate.svgAssets)) {
+          throw new Error("SVG Illustrator must return { svgAssets: [...] }.");
+        }
+        const ids = candidate.svgAssets.map((asset: any) => asset?.sceneId);
+        const expected = state.scenes.map((scene) => scene.sceneId);
+        if (JSON.stringify(ids) !== JSON.stringify(expected)) {
+          throw new Error("SVG assets must cover every scene exactly once and in scene order.");
+        }
+        candidate.svgAssets.forEach((asset: any) => validateSvgArtwork(asset?.svg, asset?.sceneId));
+      },
+    );
+
+    return {
+      svgAssets: data.svgAssets!.map((asset: any) => ({
+        sceneId: asset.sceneId,
+        svg: validateSvgArtwork(asset.svg, asset.sceneId),
+      })),
+      svgIssues: [],
+    };
+  } catch (error) {
+    const issue = `SVG illustration generation/validation failed: ${shortReason(error)}`;
+    logEvent("svgIllustrator.failed", { reason: shortReason(error) });
+    return { svgAssets: [], svgIssues: [issue] };
+  }
+}
+
 const asText = (item: unknown): string =>
   typeof item === "string" ? item : JSON.stringify(item);
 
@@ -860,10 +1039,26 @@ export async function qaNode(state: typeof FilmState.State) {
     scenes: state.scenes,
     compositionPlan: state.compositionPlan,
     visualPrompts: state.visualPrompts,
+    svgAssets: state.svgAssets,
+    svgIssues: state.svgIssues,
     productionBible: asObject(state.productionBible),
   };
 
   const validatorReport = validatePackage(pkg);
+  for (const issue of state.svgIssues ?? []) {
+    validatorReport.blockingIssues.push({
+      gate: "svg-illustration",
+      sceneId: null,
+      problem: issue,
+    });
+  }
+  if (!state.svgAssets || state.svgAssets.length !== state.scenes.length) {
+    validatorReport.blockingIssues.push({
+      gate: "svg-illustration",
+      sceneId: null,
+      problem: "SVG asset coverage does not match the approved scene count.",
+    });
+  }
 
   // ---- Layer 2: LLM judgment (facts, analogy fidelity, depiction, story craft). ----
   let qa: any = null;
@@ -874,11 +1069,25 @@ export async function qaNode(state: typeof FilmState.State) {
       JSON.stringify({ package: pkg, validatorReport }),
     ));
   } catch (error) {
-    // A flaky judge must not crash the pipeline; the validator alone still decides.
+    // Independent creative review is a release gate; deterministic validation
+    // cannot substitute for factual, analogy, and depiction judgment.
     logEvent("qa.judgment_failed", { reason: shortReason(error) });
   }
 
   const llmStatus = qa?.status ?? qa?.qualityStatus;
+  if (!qa || !["pass", "revise", "fail"].includes(String(llmStatus))) {
+    qa = {
+      ...(qa ?? {}),
+      status: "revise",
+      blockingIssues: [{
+        category: "qa-review",
+        sceneId: null,
+        problem: "Independent QA review is missing, failed, or returned an invalid status.",
+        requiredFix: "Restore a valid independent QA response before release.",
+      }],
+      summary: "Release blocked because independent creative QA did not complete.",
+    };
+  }
   const llmIssues: any[] = Array.isArray(qa?.blockingIssues)
     ? qa.blockingIssues
     : [];
@@ -1049,16 +1258,26 @@ export async function qaNode(state: typeof FilmState.State) {
 
   // 3. Deterministic package validator issues & LLM creative quality threshold.
   const validatorIssues = asArray(validatorReport?.blockingIssues);
-  const dimensionValues =
-    qa?.dimensions && typeof qa.dimensions === "object"
-      ? Object.values(qa.dimensions)
-          .map(Number)
-          .filter((n) => !Number.isNaN(n))
-      : [];
-  const averageQuality =
-    dimensionValues.length > 0
-      ? dimensionValues.reduce((sum, n) => sum + n, 0) / dimensionValues.length
-      : null;
+  const scoreKeys = [
+    "hookAndCuriosity",
+    "narrativeStructure",
+    "centralIdeaClarity",
+    "causeAndEffectProgression",
+    "emotionalEngagement",
+    "analogyQualityAndFidelity",
+    "visualStorytelling",
+    "ahaMomentAndPayoff",
+    "factualAccuracy",
+    "endingAndMemorability",
+  ];
+  const rawScores = qa?.creativeScores ?? qa?.dimensions;
+  const dimensionValues = scoreKeys.map((key) => Number(rawScores?.[key]));
+  const hasCompleteScores =
+    dimensionValues.length === scoreKeys.length &&
+    dimensionValues.every((score) => Number.isFinite(score) && score >= 1 && score <= 10);
+  const averageQuality = hasCompleteScores
+    ? dimensionValues.reduce((sum, score) => sum + score, 0) / dimensionValues.length
+    : null;
 
   if (averageQuality !== null && averageQuality < QUALITY_MIN) {
     reviewGates.push({
@@ -1071,8 +1290,7 @@ export async function qaNode(state: typeof FilmState.State) {
   }
 
   const allBlocking = [...validatorIssues, ...reviewGates, ...llmBlocking];
-  const passed =
-    allBlocking.length === 0 && llmStatus !== "revise" && llmStatus !== "fail";
+  const passed = allBlocking.length === 0 && llmStatus === "pass";
 
   const candidateStages: Stage[] = allBlocking
     .map((issue) => stageForIssue(issue))
@@ -1099,16 +1317,38 @@ export async function qaNode(state: typeof FilmState.State) {
 
   return {
     qualityStatus: passed ? "pass" : "revise",
-    qaReport: {
+    qualityReport: {
       ...(qa ?? {}),
+      status: passed ? "pass" : "revise",
+      reviseTarget,
+      timingAudit: qa?.timingAudit ?? {},
+      blockingIssues: allBlocking,
+      reviewItems: reviewGates,
+      factReview: qa?.factReview ?? [],
+      analogyReview: qa?.analogyReview ?? [],
+      depictionReview: qa?.depictionReview ?? [],
+      creativeScores: {
+        hookAndCuriosity: qa?.creativeScores?.hookAndCuriosity ?? null,
+        narrativeStructure: qa?.creativeScores?.narrativeStructure ?? null,
+        centralIdeaClarity: qa?.creativeScores?.centralIdeaClarity ?? null,
+        causeAndEffectProgression: qa?.creativeScores?.causeAndEffectProgression ?? null,
+        emotionalEngagement: qa?.creativeScores?.emotionalEngagement ?? null,
+        analogyQualityAndFidelity: qa?.creativeScores?.analogyQualityAndFidelity ?? null,
+        visualStorytelling: qa?.creativeScores?.visualStorytelling ?? null,
+        ahaMomentAndPayoff: qa?.creativeScores?.ahaMomentAndPayoff ?? null,
+        factualAccuracy: qa?.creativeScores?.factualAccuracy ?? null,
+        endingAndMemorability: qa?.creativeScores?.endingAndMemorability ?? null,
+        average: averageQuality,
+        rationales: qa?.creativeScores?.rationales ?? {},
+      },
       validatorReport,
-      reviewGates,
       publicationCaveats,
       averageQuality,
-      blockingIssues: allBlocking,
+      summary: qa?.report ?? qa?.summary ?? null,
     },
+    validatorReport,
     reviseTarget,
-    revisionFeedback: feedback,
+    qaFeedback: feedback ?? "",
     revisionCount: passed
       ? (state.revisionCount ?? 0)
       : (state.revisionCount ?? 0) + 1,
