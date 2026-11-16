@@ -14,7 +14,7 @@ export type WorkflowOutcome = {
 };
 
 // Single-flight: the same topic + audience can only run once at a time. Starting a second identical run
-// would double the paid model calls and halve the shared rate limit for both.
+// would duplicate expensive local inference work.
 const inFlight = new Map<string, Promise<WorkflowOutcome>>();
 
 export function runFilmWorkflow(

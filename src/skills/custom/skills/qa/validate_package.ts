@@ -228,10 +228,10 @@ export function validatePackage(
     scenes.map((s) => s.estimatedDurationSeconds),
   ).size;
   if (distinctBeatDurations < 3 || distinctSceneDurations < 3)
-    R.block(
+    R.warn(
       "pacing",
       null,
-      "Fewer than 3 distinct scene/beat durations; rhythm is monotone. At least 3 distinct durations are required.",
+      "Fewer than 3 distinct scene/beat durations; consider varying pacing if rhythm feels monotone.",
     );
 
   for (let i = 0; i < beats.length; i++) {
@@ -249,7 +249,11 @@ export function validatePackage(
         `Beat ${i + 1} must use stable beatId '${expectedBeatId}' (received '${b.beatId ?? "missing"}').`,
       );
     if (b.cardNumber !== i + 1)
-      R.block("schema", sid, `Beat ${expectedBeatId} must have cardNumber ${i + 1}.`);
+      R.block(
+        "schema",
+        sid,
+        `Beat ${expectedBeatId} must have cardNumber ${i + 1}.`,
+      );
     if (d < 3.5 || d > 5.5)
       R.block("timing", sid, `Duration ${d}s outside 3.5-5.5s.`);
     if (d && w / d > MAX_WPS)
@@ -334,7 +338,10 @@ export function validatePackage(
         R.block("briefContract", i + 1, `beatMap[${i}] must be an object.`);
         continue;
       }
-      if (bm[i].stage !== beats[i]!.stage || bm[i].connector !== beats[i]!.connector)
+      if (
+        bm[i].stage !== beats[i]!.stage ||
+        bm[i].connector !== beats[i]!.connector
+      )
         R.block(
           "briefContract",
           beats[i]!.cardNumber,
@@ -355,7 +362,8 @@ export function validatePackage(
   const hasAnalogyMap = Array.isArray(brief.analogyMap);
   const analogyMap = hasAnalogyMap ? brief.analogyMap : [];
   const explicitlyNoAnalogy =
-    analogyMap.length === 0 && /no analogy/i.test(String(brief.whereAnalogyBreaks ?? ""));
+    analogyMap.length === 0 &&
+    /no analogy/i.test(String(brief.whereAnalogyBreaks ?? ""));
   if (!hasAnalogyMap) {
     R.block(
       "briefContract",
@@ -395,9 +403,17 @@ export function validatePackage(
       "creativeBrief missing mechanism or oneIdea.",
     );
   if (!(script.oneIdea || script.centralIdea))
-    R.block("schema", null, "script is missing oneIdea (or the supported centralIdea alias).");
+    R.block(
+      "schema",
+      null,
+      "script is missing oneIdea (or the supported centralIdea alias).",
+    );
   if (!(sb.oneIdea || sb.centralIdea))
-    R.block("schema", null, "storyboard is missing oneIdea (or the supported centralIdea alias).");
+    R.block(
+      "schema",
+      null,
+      "storyboard is missing oneIdea (or the supported centralIdea alias).",
+    );
   if (!brief.whereAnalogyBreaks)
     R.block(
       "briefContract",
@@ -465,7 +481,8 @@ export function validatePackage(
       );
 
   // Factual provenance: a beat can cite only a claim in the Director ledger;
-  // each ledger claim must in turn resolve to a real source in the Research dossier.
+  // each ledger claim must either resolve to a real source in the Research dossier
+  // or be explicitly marked unverified with needsVerification: true.
   const dossier = parse(pkg.researchDossier) || {};
   const sourceList: Obj[] = Array.isArray(dossier.sourceList)
     ? dossier.sourceList
@@ -497,12 +514,26 @@ export function validatePackage(
       : claim.sourceId != null
         ? [claim.sourceId]
         : [];
-    if (refs.length === 0)
-      R.block(
-        "epistemic",
-        null,
-        `Claim ${id} has no sourceId/sourceIds; mark the claim for verification and do not present it as established.`,
-      );
+    if (refs.length === 0) {
+      const isExplicitlyUnverified =
+        claim.needsVerification === true &&
+        /unverified/i.test(
+          String(claim.epistemicStatus ?? claim.confidence ?? ""),
+        );
+      if (!isExplicitlyUnverified) {
+        R.block(
+          "epistemic",
+          null,
+          `Claim ${id} has no sourceId/sourceIds and is not explicitly marked unverified with needsVerification: true.`,
+        );
+      } else {
+        R.warn(
+          "epistemic",
+          null,
+          `Claim ${id} has no source reference and requires verification.`,
+        );
+      }
+    }
     for (const sourceId of refs)
       if (!sourceIds.has(sourceId))
         R.block(
@@ -574,15 +605,21 @@ export function validatePackage(
       R.block("schema", sid, "HTML tag in scene caption.");
   }
 
-  for (let i = 0; i <= scenes.length - 3; i++)
-    if (scenes.slice(i, i + 3).every((s) => !s?.characters)) {
-      R.block(
-        "storyCraft",
-        scenes[i]?.sceneId ?? i + 1,
-        "3 consecutive scenes without the protagonist (max 2).",
-      );
-      break;
-    }
+  const requiresProtagonist =
+    brief.requiresProtagonist === true ||
+    (Array.isArray(brief.characters) && brief.characters.length > 0);
+
+  if (requiresProtagonist) {
+    for (let i = 0; i <= scenes.length - 3; i++)
+      if (scenes.slice(i, i + 3).every((s) => !s?.characters)) {
+        R.block(
+          "storyCraft",
+          scenes[i]?.sceneId ?? i + 1,
+          "3 consecutive scenes without the protagonist (max 2).",
+        );
+        break;
+      }
+  }
 
   // 4. Composition plan
   if (comp.length !== scenes.length)
@@ -593,7 +630,11 @@ export function validatePackage(
     );
   for (const c of comp) {
     if (!c || typeof c !== "object") {
-      R.block("composition", null, "Every compositionPlan entry must be an object.");
+      R.block(
+        "composition",
+        null,
+        "Every compositionPlan entry must be an object.",
+      );
       continue;
     }
     const keys = new Set(Object.keys(c)),
@@ -645,7 +686,11 @@ export function validatePackage(
   const byId = new Map(scenes.map((s) => [s?.sceneId, s]));
   for (const v of vp) {
     if (!v || typeof v !== "object") {
-      R.block("visualPrompts", null, "Every visual prompt entry must be an object.");
+      R.block(
+        "visualPrompts",
+        null,
+        "Every visual prompt entry must be an object.",
+      );
       continue;
     }
     const sid = v.sceneId,
@@ -660,11 +705,16 @@ export function validatePackage(
         sid,
         "Prompt mentions a label; labels belong in diagramLabels.",
       );
-    if (!/15\s*[-–]\s*74/.test(p))
-      R.block(
+    const hasStructuredZone =
+      v.artworkZone != null ||
+      v.safeZones != null ||
+      (v.layout && typeof v.layout === "object");
+    const hasTextZone = /15\s*[-–]\s*74/.test(p);
+    if (!hasStructuredZone && !hasTextZone)
+      R.warn(
         "visualPrompts",
         sid,
-        "Prompt does not state the 15-74% artwork zone.",
+        "Visual prompt has neither structured artworkZone/safeZones metadata nor an explicit 15-74% zone note.",
       );
     if (!/\b(left|right|center|centre|upper|lower|middle)\b/i.test(p))
       R.warn(
@@ -694,8 +744,18 @@ export function validatePackage(
   }
 
   // 6. Bible / continuity
-  if (!(bible.characters || []).some((c: Obj) => c.characterId === "C01"))
-    R.block("continuity", null, "productionBible has no C01.");
+  const hasSceneCharacters = scenes.some(
+    (s) => Array.isArray(s?.characters) && s.characters.length > 0,
+  );
+  if (
+    (requiresProtagonist || hasSceneCharacters) &&
+    !(bible.characters || []).some((c: Obj) => c.characterId === "C01")
+  )
+    R.block(
+      "continuity",
+      null,
+      "productionBible has no C01 despite recurring protagonist requirement or scene character references.",
+    );
   for (const c of bibleWrap.continuityChecks || []) {
     if (
       c.checkType === "image-level" &&

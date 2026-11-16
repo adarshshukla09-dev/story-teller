@@ -1,59 +1,331 @@
-import "dotenv/config";
 import { ChatOllama } from "@langchain/ollama";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
+
 import { getSkills, type TaskType } from "../skills/manger/skills-manger.js";
 import { envNumber, logEvent } from "../lib/run-context.js";
+import { OLLAMA_BASE_URL, OLLAMA_MODEL } from "../config/model.js";
+
+// ===============================
+// MODEL TIERS & DEFAULTS
+// ===============================
+
+export const FAST_MODEL = process.env.OLLAMA_FAST_MODEL || OLLAMA_MODEL;
+export const BALANCED_MODEL = process.env.OLLAMA_BALANCED_MODEL || OLLAMA_MODEL;
+export const STRONG_MODEL = process.env.OLLAMA_STRONG_MODEL || OLLAMA_MODEL;
+
+const DEFAULT_TEMPERATURE = 0.7;
+const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
+const DEFAULT_TIMEOUT_MS = 180_000;
+const DEFAULT_CONTEXT_TOKENS = 16384;
+const DEFAULT_REPEAT_PENALTY = 1.15;
+const MAX_REPEAT_PENALTY = 1.5;
+
+// ===============================
+// CENTRALIZED AGENT ROUTING POLICY
+// ===============================
+
+export interface AgentPolicy {
+  model: string;
+  temperature: number;
+  maxOutputTokens: number;
+  contextTokens: number;
+  timeoutMs: number;
+  maxAttempts: number;
+}
+
+/**
+ * Task-specific execution budgets.
+ * Keep contextTokens consistent per model tier where possible to avoid Ollama runner reloads.
+ */
+const FAST_CONTEXT = 8192;
+const BALANCED_CONTEXT = 16384;
+const STRONG_CONTEXT = 32768;
+
+export const AGENT_POLICIES: Partial<Record<TaskType, AgentPolicy>> = {
+  comprehension: {
+    model: FAST_MODEL,
+    temperature: 0.2,
+    maxOutputTokens: 800,
+    contextTokens: FAST_CONTEXT,
+    timeoutMs: 45000,
+    maxAttempts: 1,
+  },
+
+  factCheck: {
+    model: FAST_MODEL,
+    temperature: 0.2,
+    maxOutputTokens: 1200,
+    contextTokens: FAST_CONTEXT,
+    timeoutMs: 60000,
+    maxAttempts: 1,
+  },
+
+  qa: {
+    model: FAST_MODEL,
+    temperature: 0.2,
+    maxOutputTokens: 1000,
+    contextTokens: FAST_CONTEXT,
+    timeoutMs: 60000,
+    maxAttempts: 1,
+  },
+
+  continuity: {
+    model: BALANCED_MODEL,
+    temperature: 0.3,
+    maxOutputTokens: 1800,
+    contextTokens: BALANCED_CONTEXT,
+    timeoutMs: 90000,
+    maxAttempts: 1,
+  },
+
+  composition: {
+    model: BALANCED_MODEL,
+    temperature: 0.3,
+    maxOutputTokens: 2500,
+    contextTokens: BALANCED_CONTEXT,
+    timeoutMs: 120000,
+    maxAttempts: 1,
+  },
+
+  imagePrompt: {
+    model: BALANCED_MODEL,
+    temperature: 0.4,
+    maxOutputTokens: 2500,
+    contextTokens: BALANCED_CONTEXT,
+    timeoutMs: 120000,
+    maxAttempts: 1,
+  },
+
+  renderer: {
+    model: BALANCED_MODEL,
+    temperature: 0.5,
+    maxOutputTokens: 1800,
+    contextTokens: BALANCED_CONTEXT,
+    timeoutMs: 90000,
+    maxAttempts: 1,
+  },
+
+  research: {
+    model: STRONG_MODEL,
+    temperature: 0.4,
+    maxOutputTokens: 3500,
+    contextTokens: STRONG_CONTEXT,
+    timeoutMs: 240000,
+    maxAttempts: 2,
+  },
+
+  strategy: {
+    model: STRONG_MODEL,
+    temperature: 0.5,
+    maxOutputTokens: 1800,
+    contextTokens: 16384,
+    timeoutMs: 300000,
+    maxAttempts: 1,
+  },
+
+  director: {
+    model: STRONG_MODEL,
+    temperature: 0.7,
+    maxOutputTokens: 4000,
+    contextTokens: STRONG_CONTEXT,
+    timeoutMs: 240000,
+    maxAttempts: 2,
+  },
+
+  script: {
+    model: STRONG_MODEL,
+    temperature: 0.7,
+    maxOutputTokens: 6000,
+    contextTokens: STRONG_CONTEXT,
+    timeoutMs: 300000,
+    maxAttempts: 2,
+  },
+
+  storyboard: {
+    model: STRONG_MODEL,
+    temperature: 0.5,
+    maxOutputTokens: 4500,
+    contextTokens: STRONG_CONTEXT,
+    timeoutMs: 240000,
+    maxAttempts: 2,
+  },
+};
+
+function resolvePolicy(config: AgentConfig): AgentPolicy {
+  const routed = AGENT_POLICIES[config.task];
+
+  return {
+    model: config.model ?? routed?.model ?? OLLAMA_MODEL,
+    temperature:
+      config.temperature ?? routed?.temperature ?? DEFAULT_TEMPERATURE,
+    maxOutputTokens:
+      config.maxOutputTokens ??
+      routed?.maxOutputTokens ??
+      envNumber("OLLAMA_MAX_OUTPUT_TOKENS", DEFAULT_MAX_OUTPUT_TOKENS),
+    contextTokens:
+      config.contextTokens ??
+      routed?.contextTokens ??
+      envNumber("OLLAMA_NUM_CTX", DEFAULT_CONTEXT_TOKENS),
+    timeoutMs:
+      config.timeoutMs ??
+      routed?.timeoutMs ??
+      envNumber("AGENT_TIMEOUT_MS", DEFAULT_TIMEOUT_MS),
+    maxAttempts:
+      config.maxAttempts ??
+      routed?.maxAttempts ??
+      envNumber("AGENT_MAX_ATTEMPTS", 2),
+  };
+}
+
+// ===============================
+// SKILL BUNDLE CACHE
+// ===============================
+
+const skillCache = new Map<TaskType, Promise<string>>();
+
+function getCachedSkills(task: TaskType): Promise<string> {
+  let cached = skillCache.get(task);
+  if (!cached) {
+    cached = getSkills(task).catch((err) => {
+      skillCache.delete(task);
+      throw err;
+    });
+    skillCache.set(task, cached);
+  }
+  return cached;
+}
+
+export function clearSkillCache(): void {
+  skillCache.clear();
+}
 
 // ===============================
 // MODEL CONFIGURATION
 // ===============================
 
-const DEFAULT_TEMPERATURE = 0.7;
+const models = new Map<string, ChatOllama>();
 
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "gemma4:e2b";
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-
-const models = new Map<number, ChatOllama>();
-
-function getModel(temperature: number): ChatOllama {
-  let model = models.get(temperature);
+function getModel(
+  modelName: string,
+  temperature: number,
+  maxOutputTokens: number,
+  contextTokens: number,
+  repeatPenalty: number,
+): ChatOllama {
+  const key = `${modelName}|${temperature}|${maxOutputTokens}|${contextTokens}|${repeatPenalty}`;
+  let model = models.get(key);
 
   if (!model) {
     model = new ChatOllama({
-      model: OLLAMA_MODEL,
+      model: modelName,
       baseUrl: OLLAMA_BASE_URL,
       temperature,
-      numPredict: envNumber("OLLAMA_MAX_OUTPUT_TOKENS", 8192),
+      numPredict: maxOutputTokens,
+      numCtx: contextTokens,
+      repeatPenalty,
+      repeatLastN: envNumber("OLLAMA_REPEAT_LAST_N", 256),
+      format: "json",
     });
 
-    models.set(temperature, model);
+    models.set(key, model);
   }
 
   return model;
 }
 
 // ===============================
-// RATE LIMITING
+// DEADLINE ENFORCEMENT
 // ===============================
 
-// Ollama runs locally, so provider API quotas are unnecessary.
-// Keep optional throttling to control local resource usage.
+async function withTimeout<T>(
+  work: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
-const REQUEST_DELAY = envNumber("OLLAMA_MIN_DELAY_MS", 0);
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Agent call exceeded ${timeoutMs} ms and was aborted.`));
+    }, timeoutMs);
+  });
 
-let lastRequestTime = 0;
-
-const delay = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitForRateLimit(): Promise<void> {
-  const elapsed = Date.now() - lastRequestTime;
-
-  if (elapsed < REQUEST_DELAY) {
-    await delay(REQUEST_DELAY - elapsed);
+  try {
+    return await Promise.race([work(controller.signal), deadline]);
+  } finally {
+    clearTimeout(timer);
   }
+}
 
-  lastRequestTime = Date.now();
+// ===============================
+// ERROR CLASSIFICATION & RETRY POLICY
+// ===============================
+
+export type AgentErrorType =
+  | "timeout"
+  | "repeat_loop"
+  | "rate_limit"
+  | "cancelled"
+  | "model_error";
+
+function classifyError(error: unknown): AgentErrorType {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (/aborted|exceeded \d+ ms|timeout/i.test(message)) return "timeout";
+  if (/repeat limit/i.test(message)) return "repeat_loop";
+  if (/rate limit|429|too many requests/i.test(message)) return "rate_limit";
+  if (/cancel/i.test(message)) return "cancelled";
+  return "model_error";
+}
+
+function shouldRetry(errorType: AgentErrorType): boolean {
+  switch (errorType) {
+    case "repeat_loop":
+    case "rate_limit":
+      return true;
+    case "timeout":
+      // Retrying a full generation that already hit a generous deadline rarely succeeds
+      // unless transient load caused it; allow retry only if maxAttempts > 1.
+      return true;
+    case "cancelled":
+    case "model_error":
+      return false;
+  }
+}
+
+// ===============================
+// METRICS & TELEMETRY
+// ===============================
+
+export interface AgentMetrics {
+  agent: string;
+  task: TaskType;
+  model: string;
+
+  durationMs: number;
+
+  inputCharacters: number;
+  outputCharacters: number;
+
+  attempts: number;
+  success: boolean;
+
+  errorType?: AgentErrorType | undefined;
+
+  // Additional measurements
+  timeToFirstTokenMs?: number | undefined;
+  tokensPerSecond?: number | undefined;
+}
+
+const metricsLog: AgentMetrics[] = [];
+
+export function getAgentMetrics(): readonly AgentMetrics[] {
+  return metricsLog;
+}
+
+export function resetAgentMetrics(): void {
+  metricsLog.length = 0;
 }
 
 // ===============================
@@ -71,6 +343,7 @@ export type ModelInvoker = (
     temperature: number;
     signal: AbortSignal;
     agent: string;
+    model: string;
   },
 ) => Promise<string>;
 
@@ -87,11 +360,9 @@ function contentToText(content: unknown): string {
     return content
       .map((part) => {
         if (typeof part === "string") return part;
-
         if (part && typeof part === "object" && "text" in part) {
           return String((part as { text?: unknown }).text ?? "");
         }
-
         return "";
       })
       .join("");
@@ -104,11 +375,21 @@ function contentToText(content: unknown): string {
 // AGENT CONFIGURATION
 // ===============================
 
-interface AgentConfig {
+export interface AgentConfig {
   name: string;
   role: string;
   task: TaskType;
   temperature?: number;
+  /** Per-agent model tag. Overrides AGENT_POLICIES and OLLAMA_MODEL. */
+  model?: string;
+  /** Per-agent output cap. Overrides AGENT_POLICIES. */
+  maxOutputTokens?: number;
+  /** Per-agent context window size. Overrides AGENT_POLICIES. */
+  contextTokens?: number;
+  /** Optional per-agent deadline; useful for bounded batch generation. */
+  timeoutMs?: number;
+  /** Number of low-level model attempts; outer JSON repair is handled by callJson. */
+  maxAttempts?: number;
 }
 
 // ===============================
@@ -119,26 +400,25 @@ export async function runAgent(
   config: AgentConfig,
   input: string,
 ): Promise<string> {
+  const policy = resolvePolicy(config);
+  const maxAttempts = Math.min(5, Math.max(1, Math.floor(policy.maxAttempts)));
+  const baseRepeatPenalty = envNumber(
+    "OLLAMA_REPEAT_PENALTY",
+    DEFAULT_REPEAT_PENALTY,
+  );
+
   logEvent("agent.start", {
     agent: config.name,
-    model: OLLAMA_MODEL,
+    task: config.task,
+    model: policy.model,
+    maxOutputTokens: policy.maxOutputTokens,
+    contextTokens: policy.contextTokens,
+    timeoutMs: policy.timeoutMs,
   });
 
-  const skills = await getSkills(config.task);
+  const skills = await getCachedSkills(config.task);
 
-  const configuredAttempts = envNumber("AGENT_MAX_ATTEMPTS", 1);
-
-  const maxAttempts = Math.min(5, Math.max(1, Math.floor(configuredAttempts)));
-
-  const timeoutMs = envNumber("AGENT_TIMEOUT_MS", 180_000);
-
-  const temperature = config.temperature ?? DEFAULT_TEMPERATURE;
-
-  const messages: ChatMessage[] = [
-    {
-      role: "system",
-      content: `
-You are ${config.name}.
+  const systemPrompt = `You are ${config.name}.
 
 YOUR ROLE:
 ${config.role}
@@ -153,81 +433,125 @@ RULES:
 - Follow your assigned role.
 - Use the supplied skills.
 - Do not perform another agent's responsibilities.
-- Produce structured, useful outputs.
-- Treat the user's topic as a title, not as a complete brief.
-`,
-    },
-    {
-      role: "user",
-      content: input,
-    },
+- Treat the input as the authoritative payload for your assigned task.
+- Use only the context actually supplied.
+- Do not assume missing research, strategy, or upstream artifacts exist.
+- Produce structured, useful outputs.`;
+
+  const messages: ChatMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: input },
   ];
 
+  const inputCharacters = systemPrompt.length + input.length;
+  const totalStartedAt = performance.now();
+
   let lastError: unknown;
+  let lastErrorType: AgentErrorType | undefined;
   let attemptsUsed = 0;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     attemptsUsed = attempt;
 
+    // Raise repeat penalty on retries to break token repetition loops.
+    const repeatPenalty = Math.min(
+      MAX_REPEAT_PENALTY,
+      baseRepeatPenalty + 0.15 * (attempt - 1),
+    );
+
     try {
-      await waitForRateLimit();
+      const attemptStartedAt = performance.now();
 
-      const startedAt = performance.now();
-
-      const signal = AbortSignal.timeout(timeoutMs);
-
-      const text = customInvoker
-        ? await customInvoker(messages, {
-            temperature,
+      const text = await withTimeout(async (signal) => {
+        if (customInvoker) {
+          return customInvoker(messages, {
+            temperature: policy.temperature,
             signal,
             agent: config.name,
-          })
-        : contentToText(
-            (
-              await getModel(temperature).invoke(
-                messages.map((message) =>
-                  message.role === "system"
-                    ? new SystemMessage(message.content)
-                    : new HumanMessage(message.content),
-                ),
-                { signal },
-              )
-            ).content,
-          );
+            model: policy.model,
+          });
+        }
+
+        const response = await getModel(
+          policy.model,
+          policy.temperature,
+          policy.maxOutputTokens,
+          policy.contextTokens,
+          repeatPenalty,
+        ).invoke(
+          messages.map((message) =>
+            message.role === "system"
+              ? new SystemMessage(message.content)
+              : new HumanMessage(message.content),
+          ),
+          { signal },
+        );
+
+        return contentToText(response.content);
+      }, policy.timeoutMs);
+
+      const durationMs = Math.round(performance.now() - attemptStartedAt);
+
+      const metric: AgentMetrics = {
+        agent: config.name,
+        task: config.task,
+        model: policy.model,
+        durationMs,
+        inputCharacters,
+        outputCharacters: text.length,
+        attempts: attempt,
+        success: true,
+      };
+      metricsLog.push(metric);
 
       logEvent("agent.success", {
-        agent: config.name,
-        model: OLLAMA_MODEL,
-        attempt,
-        durationMs: Math.round(performance.now() - startedAt),
-        chars: text.length,
+        ...metric,
+        repeatPenalty,
       });
 
       return text;
     } catch (error) {
       lastError = error;
-
+      lastErrorType = classifyError(error);
       const message = error instanceof Error ? error.message : String(error);
 
       logEvent("agent.failure", {
         agent: config.name,
-        model: OLLAMA_MODEL,
+        task: config.task,
+        model: policy.model,
         attempt,
+        repeatPenalty,
+        errorType: lastErrorType,
+        repeatLoop: lastErrorType === "repeat_loop",
         error: message.slice(0, 500),
       });
 
-      if (attempt >= maxAttempts) break;
+      if (attempt >= maxAttempts || !shouldRetry(lastErrorType)) {
+        break;
+      }
 
-      const backoff = Math.min(30_000, 1000 * 2 ** (attempt - 1));
-
-      await delay(backoff);
+      if (lastErrorType === "rate_limit") {
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
     }
   }
 
+  const totalDurationMs = Math.round(performance.now() - totalStartedAt);
+  const failedMetric: AgentMetrics = {
+    agent: config.name,
+    task: config.task,
+    model: policy.model,
+    durationMs: totalDurationMs,
+    inputCharacters,
+    outputCharacters: 0,
+    attempts: attemptsUsed,
+    success: false,
+    ...(lastErrorType !== undefined ? { errorType: lastErrorType } : {}),
+  };
+  metricsLog.push(failedMetric);
+
   throw new Error(
-    `Agent ${config.name} failed after ${attemptsUsed} attempt(s)`,
-    {
-      cause: lastError,
-    },
+    `Agent ${config.name} (${lastErrorType ?? "unknown"}) failed after ${attemptsUsed} attempt(s)`,
+    { cause: lastError },
   );
 }

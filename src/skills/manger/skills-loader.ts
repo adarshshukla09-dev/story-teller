@@ -1,11 +1,11 @@
-// src/skills/skills-loader.ts
-
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { SkillReference } from "./skills-registry.js";
 
-const SKILLS_ROOT = path.resolve(process.cwd(), "src", "skills");
+// Resolve relative to this file, not the working directory, so the app runs from any cwd.
+const SKILLS_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 export async function loadSkill(
   repository: string,

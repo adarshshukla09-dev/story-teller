@@ -12,9 +12,9 @@
 - QA feedback includes comprehension `revisionInstructions` and fact-check `correctedClaimSuggestions`.
 - Art direction runs once, only after QA passes (it is not inspected by QA and cost a call per pass); its failure no longer discards an approved package.
 - Invalid/truncated JSON from a model is retried once with a repair instruction before failing.
-- Per-agent temperature (reviewers 0.1-0.2, writers 0.7), `maxOutputTokens`, per-call timeout, quota-aware backoff, fatal errors (bad key) are not retried, array-style Gemini content handled.
+- Per-agent temperature (reviewers 0.1-0.2, writers 0.7), configurable output tokens, per-call timeout, retry handling, and array-style model content support.
 - Crashed runs save their last known state to `result/result<N>.failed.json`; result writes are atomic.
-- Skill files cached; rate limits and thresholds configurable via env (see `.env.example`).
+- Skill files cached; workflow thresholds configurable via env (see `.env.example`).
 - `src/index.ts` is now a CLI: `npm run dev -- "topic"`; no model calls on import or without a topic.
 
 ## Tests

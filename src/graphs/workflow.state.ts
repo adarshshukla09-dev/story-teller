@@ -37,7 +37,22 @@ export interface CompositionElement {
 
   relationship?: string;
 }
+type CreativeScore = number | null;
 
+interface CreativeScores {
+  hookAndCuriosity: CreativeScore;
+  narrativeStructure: CreativeScore;
+  centralIdeaClarity: CreativeScore;
+  causeAndEffectProgression: CreativeScore;
+  emotionalEngagement: CreativeScore;
+  analogyQualityAndFidelity: CreativeScore;
+  visualStorytelling: CreativeScore;
+  ahaMomentAndPayoff: CreativeScore;
+  factualAccuracy: CreativeScore;
+  endingAndMemorability: CreativeScore;
+  average: number | null;
+  rationales: Record<string, string>;
+}
 export interface CompositionPlan {
   sceneId: number;
 
@@ -139,20 +154,7 @@ export interface QualityReport {
   factReview: unknown;
   analogyReview: unknown[];
   depictionReview: unknown[];
-  creativeScores?: {
-    hookAndCuriosity: number;
-    narrativeStructure: number;
-    centralIdeaClarity: number;
-    causeAndEffectProgression: number;
-    emotionalEngagement: number;
-    analogyQualityAndFidelity: number;
-    visualStorytelling: number;
-    ahaMomentAndPayoff: number;
-    factualAccuracy: number;
-    endingAndMemorability: number;
-    average: number;
-    rationales?: Record<string, string>;
-  } | null;
+  creativeScores: CreativeScore;
   summary: string | null;
 }
 
@@ -163,12 +165,30 @@ export interface QualityReport {
 export const FilmState = Annotation.Root({
   topic: Annotation<string>(),
 
-  sourceMaterials: Annotation<any[]>({ reducer: (_, next) => next, default: () => [] }),
-  audience: Annotation<string>({ reducer: (_, next) => next, default: () => "curious beginner" }),
-  researchDossier: Annotation<any>({ reducer: (_, next) => next, default: () => null }),
-  explanationStrategy: Annotation<any>({ reducer: (_, next) => next, default: () => null }),
-  factCheckReport: Annotation<any>({ reducer: (_, next) => next, default: () => null }),
-  comprehensionReport: Annotation<any>({ reducer: (_, next) => next, default: () => null }),
+  sourceMaterials: Annotation<any[]>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
+  audience: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => "curious beginner",
+  }),
+  researchDossier: Annotation<any>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  explanationStrategy: Annotation<any>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  factCheckReport: Annotation<any>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  comprehensionReport: Annotation<any>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
 
   // Parsed objects (not JSON strings), so every stage and the validator read the same data.
   creativeBrief: Annotation<any>({
@@ -224,9 +244,9 @@ export const FilmState = Annotation.Root({
   }),
 
   // QA output
-  qualityReport: Annotation<QualityReport | string>({
+  qualityReport: Annotation<QualityReport | null>({
     reducer: (_, next) => next,
-    default: () => "",
+    default: () => null,
   }),
 
   qualityStatus: Annotation<"pass" | "revise">({

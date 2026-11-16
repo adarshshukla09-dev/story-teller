@@ -1,5 +1,8 @@
 import { FilmState } from "./workflow.state.js";
-import { groundResearchDossier, normalizeSourceMaterials } from "../lib/source-grounding.js";
+import {
+  groundResearchDossier,
+  normalizeSourceMaterials,
+} from "../lib/source-grounding.js";
 
 import { directorAgent } from "../agents/director.agent.js";
 import { researchAgent } from "../agents/research.agent.js";
@@ -29,43 +32,16 @@ import { envNumber, logEvent } from "../lib/run-context.js";
 import type { Script } from "../schema/script.schema.js";
 import type { Storyboard } from "../schema/storyboard.schema.js";
 
-const isProviderQuotaError = (error: unknown) =>
-  /\b429\b|RESOURCE_EXHAUSTED|quota exceeded|rate.?limit/i.test(String(error));
-
-function fallbackComposition(scenes: any[]) {
-  return scenes.map((scene) => ({
-    sceneId: scene.sceneId,
-    compositionType: ["character-and-environment","top-bottom-comparison","foreground-background-contrast","line-chart","process-flow","cutaway-magnifier"].includes(scene.compositionType) ? scene.compositionType : "character-and-environment",
-    primarySubject: {
-      element: scene.primarySubject || scene.visualMetaphor || scene.centralIdea || "Central subject",
-      position: "center",
-      coordinates: { x: 50, y: 43 },
-      relativeSize: "large",
-      depth: "midground",
-      visualPriority: 1,
-    },
-    elements: (scene.supportingElements || []).slice(0, 5).map((element: string, i: number) => ({
-      element, position: i % 2 ? "right" : "left",
-      coordinates: { x: i % 2 ? 76 : 24, y: 35 + i * 8 },
-      relativeSize: "small", depth: "foreground", visualPriority: i + 2,
-      relationship: "Supports the scene's central idea",
-    })),
-    visualHierarchy: ["primary subject", "supporting elements"],
-    visualFlow: "Move attention from the central subject to supporting elements.",
-    negativeSpace: "Keep header and caption bands clear.",
-    safeZones: { headerSafeZone: "0-14%", artworkZone: "15-74%", captionSafeZone: "75-100%" },
-  }));
-}
-
-
 // Release thresholds (env-overridable so they can be tuned without code changes).
 // QA's ten creative dimensions are scored 1-10. Translate legacy 0-100
 // environment overrides to the same 1-10 scale; the default target is 8.5/10.
 const configuredQualityMinimum = envNumber("QA_MIN_QUALITY", 85);
-const QUALITY_MIN = configuredQualityMinimum > 10
-  ? configuredQualityMinimum / 10
-  : configuredQualityMinimum;
+const QUALITY_MIN =
+  configuredQualityMinimum > 10
+    ? configuredQualityMinimum / 10
+    : configuredQualityMinimum;
 const COMPREHENSION_MIN = envNumber("QA_MIN_COMPREHENSION", 80);
+
 // Without retrieval/grounding the research agent marks EVERY claim "verification required", and the
 // fact reviewer repeats that list. A revision cannot fix it, so by default it is reported as a
 // publication caveat instead of blocking (and burning) every revision pass.
@@ -77,42 +53,66 @@ function parseAgentJson<T = any>(result: string): T {
     throw new Error("AI agent returned an empty response.");
   }
 
-  let cleaned = result.trim();
-
-  cleaned = cleaned
+  const cleaned = result
+    .trim()
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
 
-  const startObject = cleaned.indexOf("{");
-  const startArray = cleaned.indexOf("[");
+  const start = cleaned.search(/[{\[]/);
 
-  const starts = [startObject, startArray].filter((index) => index !== -1);
-
-  if (starts.length === 0) {
-    throw new Error(`No JSON object or array found:\n${result}`);
+  if (start === -1) {
+    throw new Error("No JSON object or array found.");
   }
 
-  const start = Math.min(...starts);
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
 
-  const opening = cleaned[start];
-  const closing = opening === "{" ? "}" : "]";
+  for (let i = start; i < cleaned.length; i++) {
+    const char = cleaned[i];
 
-  const end = cleaned.lastIndexOf(closing);
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
 
-  if (end < start) {
-    throw new Error("Incomplete JSON response:\n" + result);
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{" || char === "[") {
+      stack.push(char);
+    } else if (char === "}" || char === "]") {
+      const opening = stack.pop();
+
+      if (
+        (char === "}" && opening !== "{") ||
+        (char === "]" && opening !== "[")
+      ) {
+        throw new Error("Mismatched JSON brackets.");
+      }
+
+      if (stack.length === 0) {
+        try {
+          return JSON.parse(cleaned.slice(start, i + 1)) as T;
+        } catch (error) {
+          throw new Error("Invalid JSON returned by AI agent.", {
+            cause: error,
+          });
+        }
+      }
+    }
   }
 
-  const jsonString = cleaned.substring(start, end + 1);
-
-  try {
-    return JSON.parse(jsonString) as T;
-  } catch (error) {
-    throw new Error(`Invalid JSON returned by AI agent:\n${jsonString}`, {
-      cause: error,
-    });
-  }
+  throw new Error("Incomplete JSON response: model output was truncated.");
 }
 
 /** Model-produced JSON fields are untrusted: some models emit false/null instead of []. */
@@ -130,21 +130,32 @@ function shortReason(error: unknown): string {
 }
 
 /**
-- Call an agent and parse its JSON. A truncated or fenced/garbled reply is retried once with an explicit
-- repair instruction instead of crashing the whole (expensive) workflow.
+ * Call an agent and parse its JSON. A truncated or fenced/garbled reply is retried once with an explicit
+ * repair instruction instead of crashing the whole (expensive) workflow.
  */
 async function callJson<T = any>(
   agent: string,
   run: (input: string) => Promise<string>,
   input: string,
-  retries = 1,
+  retries = 2,
+  validate?: (data: T) => void,
+  normalize?: (data: any) => T,
 ): Promise<{ raw: string; data: T }> {
   let prompt = input;
   let lastError: unknown;
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     const raw = await run(prompt);
     try {
-      return { raw, data: parseAgentJson<T>(raw) };
+      const parsed = parseAgentJson<T>(raw);
+      // Deterministic repair of fields the application owns (see reconcileStoryboardBatch).
+      // Runs before validation, so validation checks the final, repaired artifact.
+      const data = normalize ? normalize(parsed) : parsed;
+      // JSON syntax alone is not enough: a response such as {} is valid JSON
+      // but is not a usable artifact. Run stage-specific contract checks here
+      // so malformed-but-parseable output receives the same repair attempts.
+      validate?.(data);
+      return { raw, data };
     } catch (error) {
       lastError = error;
       const reason = shortReason(error);
@@ -153,7 +164,24 @@ async function callJson<T = any>(
         attempt: attempt + 1,
         reason,
       });
-      prompt = `${input}\n\nYOUR PREVIOUS RESPONSE COULD NOT BE PARSED AS JSON (${reason}). Return ONLY one complete, valid JSON value: no markdown fences, no commentary, no truncation, no trailing commas.`;
+      prompt = `${input}
+
+IMPORTANT: Your previous response was invalid or did not satisfy the required output contract.
+Validation/parsing error: ${reason}
+
+Generate the complete response again. Do not return an empty object, an empty array,
+or a partial placeholder.
+
+STRICT REQUIREMENTS:
+1. Return ONLY valid JSON, with the exact top-level structure requested.
+2. Do not use Markdown code fences or explanations outside JSON.
+3. Include every required field and every required array.
+4. Preserve source narration, IDs, captions, and durations exactly where the contract requires it.
+5. Use only enum values explicitly listed in the supplied contract.
+6. Close every object and array; do not use trailing commas.
+7. Keep descriptions concise enough to complete the entire artifact.
+
+Return one complete JSON object.`;
     }
   }
   throw lastError;
@@ -162,6 +190,18 @@ async function callJson<T = any>(
 /** State may hold either raw agent strings (old runs) or parsed objects (new runs). */
 function asObject<T = any>(value: unknown): T {
   return (typeof value === "string" ? parseAgentJson<T>(value) : value) as T;
+}
+
+function getAdaptiveBatchSize(totalScenes: number): number {
+  if (process.env.STORYBOARD_BATCH_SIZE) {
+    return Math.max(
+      1,
+      Math.min(4, Math.floor(Number(process.env.STORYBOARD_BATCH_SIZE))),
+    );
+  }
+  if (totalScenes <= 6) return 2;
+  if (totalScenes <= 15) return 3;
+  return 4;
 }
 
 export async function researchNode(state: typeof FilmState.State) {
@@ -192,15 +232,32 @@ export async function strategyNode(state: typeof FilmState.State) {
 }
 
 export async function directorNode(state: typeof FilmState.State) {
-  const directorInput = JSON.stringify({
+  const basePayload = {
     topic: state.topic,
     researchDossier: state.researchDossier,
     explanationStrategy: state.explanationStrategy,
-  });
+  };
+  const directorPrompt = withFeedback(
+    JSON.stringify(basePayload),
+    state,
+    "brief",
+  );
+
   const { data } = await callJson(
     "director",
-    directorAgent,
-    withFeedback(directorInput, state, "brief"),
+    (prompt: string) => {
+      // Safely bridge string-based callJson retries with directorAgent's structured input
+      try {
+        const parsed = JSON.parse(prompt);
+        return directorAgent(parsed);
+      } catch {
+        return directorAgent({
+          ...basePayload,
+          feedback: prompt,
+        } as any);
+      }
+    },
+    directorPrompt,
   );
 
   // Stored as an object, not a JSON string, so every later stage and the validator read the same data.
@@ -255,35 +312,412 @@ export async function comprehensionNode(state: typeof FilmState.State) {
   return { comprehensionReport: data };
 }
 
-export async function storyboardNode(state: typeof FilmState.State) {
-  // The storyboard skill needs the brief (beatMap, analogyMap, conceptsToCover) as well as the script.
-  const input = JSON.stringify({
-    researchDossier: state.researchDossier,
-    explanationStrategy: state.explanationStrategy,
-    factCheckReport: state.factCheckReport,
-    comprehensionReport: state.comprehensionReport,
-    creativeBrief: asObject(state.creativeBrief),
-    script: asObject(state.script),
-  });
+const STORYBOARD_COMPOSITION_TYPES = new Set([
+  "character-and-environment",
+  "top-bottom-comparison",
+  "foreground-background-contrast",
+  "line-chart",
+  "process-flow",
+  "cutaway-magnifier",
+]);
 
-  const { raw, data } = await callJson<Storyboard>(
-    "storyboard",
-    storyboardAgent,
-    withFeedback(input, state, "storyboard"),
-  );
-
-  if (!Array.isArray(data?.scenes)) {
+/**
+ * Validate semantic storyboard requirements, not just JSON syntax.
+ * This prevents parseable placeholders such as {} from reaching workflow state.
+ */
+function validateStoryboardOutput(data: Storyboard, script: Script): void {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Storyboard must be a JSON object.");
+  }
+  if (!Array.isArray(data.scenes)) {
+    throw new Error("Storyboard must contain a scenes array.");
+  }
+  if (!Array.isArray(script.beats) || script.beats.length === 0) {
+    throw new Error("Normalized script must contain at least one beat.");
+  }
+  if (data.scenes.length !== script.beats.length) {
     throw new Error(
-      "Storyboard Agent must return a JSON object containing a scenes array.",
+      `Storyboard scene count (${data.scenes.length}) must equal script beat count (${script.beats.length}).`,
     );
   }
+  if (data.videoTitle !== script.title) {
+    throw new Error("Storyboard videoTitle must exactly match script.title.");
+  }
+  if (data.oneIdea !== script.oneIdea) {
+    throw new Error("Storyboard oneIdea must exactly match script.oneIdea.");
+  }
+  if (data.aspectRatio !== "9:16") {
+    throw new Error('Storyboard aspectRatio must be "9:16".');
+  }
+  if (!Array.isArray(data.upstreamIssues)) {
+    throw new Error("Storyboard upstreamIssues must be an array.");
+  }
+  if (
+    !data.cardTemplate ||
+    typeof data.cardTemplate !== "object" ||
+    !data.cardTemplate.headerPosition ||
+    !data.cardTemplate.artworkPosition ||
+    !data.cardTemplate.captionPosition
+  ) {
+    throw new Error("Storyboard cardTemplate is missing a required position.");
+  }
 
-  return { storyboard: raw, scenes: data.scenes };
+  for (let index = 0; index < script.beats.length; index++) {
+    const beat = script.beats[index]!;
+    const scene = data.scenes[index] as any;
+    const label = `Scene ${index + 1}`;
+
+    if (!scene || typeof scene !== "object" || Array.isArray(scene)) {
+      throw new Error(`${label} must be an object.`);
+    }
+    if (scene.sceneId !== beat.cardNumber) {
+      throw new Error(
+        `${label} sceneId must equal source beat cardNumber ${beat.cardNumber}.`,
+      );
+    }
+    if (
+      !Array.isArray(scene.sourceBeatIds) ||
+      scene.sourceBeatIds.length !== 1 ||
+      scene.sourceBeatIds[0] !== beat.beatId
+    ) {
+      throw new Error(
+        `${label} sourceBeatIds must contain only ${beat.beatId}.`,
+      );
+    }
+    if (scene.narration !== beat.narration) {
+      throw new Error(
+        `${label} narration must exactly match beat ${beat.beatId}.`,
+      );
+    }
+    if (scene.estimatedDurationSeconds !== beat.estimatedDurationSeconds) {
+      throw new Error(
+        `${label} duration must exactly match beat ${beat.beatId}.`,
+      );
+    }
+    const caption = scene.caption;
+    if (
+      !caption ||
+      caption.line1 !== beat.suggestedCaption?.line1 ||
+      (caption.line2 ?? undefined) !==
+        (beat.suggestedCaption?.line2 ?? undefined) ||
+      (caption.redEmphasis ?? undefined) !==
+        (beat.suggestedCaption?.redEmphasis ?? undefined)
+    ) {
+      throw new Error(
+        `${label} caption must exactly copy beat ${beat.beatId} suggestedCaption.`,
+      );
+    }
+    if (scene.isAhaCard !== Boolean(beat.isAhaCard)) {
+      throw new Error(`${label} isAhaCard must match beat ${beat.beatId}.`);
+    }
+    if (!scene.centralIdea || !scene.visualPurpose || !scene.primarySubject) {
+      throw new Error(
+        `${label} is missing centralIdea, visualPurpose, or primarySubject.`,
+      );
+    }
+    if (!STORYBOARD_COMPOSITION_TYPES.has(scene.compositionType)) {
+      throw new Error(`${label} has an unsupported compositionType.`);
+    }
+    if (
+      !Array.isArray(scene.supportingElements) ||
+      !Array.isArray(scene.characters)
+    ) {
+      throw new Error(
+        `${label} supportingElements and characters must be arrays.`,
+      );
+    }
+    if (
+      !scene.programmaticOverlays ||
+      !Array.isArray(scene.programmaticOverlays.diagramLabels)
+    ) {
+      throw new Error(
+        `${label} programmaticOverlays.diagramLabels must be an array.`,
+      );
+    }
+    if (
+      typeof scene.headerText !== "string" ||
+      scene.headerText !== script.title
+    ) {
+      throw new Error(
+        `${label} headerText must exactly match the video title.`,
+      );
+    }
+    if (typeof scene.transitionToNext !== "string") {
+      throw new Error(`${label} transitionToNext must be a string.`);
+    }
+  }
 }
 
 /**
-- Art direction is not part of the QA package, so it runs once, AFTER QA passes (see workflow.graph.ts),
-- instead of on every revision pass. A failure here must not discard an otherwise approved package.
+ * Facts belong to the script, not the model. A small local model often paraphrases the title or
+ * one-idea, or drifts a narration string, and then the whole batch is rejected and regenerated
+ * (each attempt costs minutes on CPU). Here the application writes every script-owned field from
+ * the beats. Only creative fields remain model-owned, and the validator checks those.
+ */
+function reconcileStoryboardBatch(
+  candidate: any,
+  batchScript: Script,
+): Storyboard {
+  if (
+    !candidate ||
+    typeof candidate !== "object" ||
+    !Array.isArray(candidate.scenes)
+  ) {
+    // Leave malformed shapes untouched so validateStoryboardOutput rejects them with a clear reason.
+    return candidate as Storyboard;
+  }
+
+  const scenes = candidate.scenes.map((scene: any, index: number) => {
+    const beat = batchScript.beats[index];
+    if (!scene || typeof scene !== "object" || !beat) return scene;
+
+    return {
+      ...scene,
+      // Script-owned fields.
+      sceneId: beat.cardNumber,
+      sourceBeatIds: [beat.beatId],
+      narration: beat.narration,
+      estimatedDurationSeconds: beat.estimatedDurationSeconds,
+      isAhaCard: Boolean(beat.isAhaCard),
+      headerText: batchScript.title,
+      caption: {
+        line1: beat.suggestedCaption?.line1,
+        line2: beat.suggestedCaption?.line2 ?? undefined,
+        redEmphasis: beat.suggestedCaption?.redEmphasis ?? undefined,
+      },
+      // Optional or structural fields: default them so a model that omits them is not rejected.
+      visualMetaphor: scene.visualMetaphor ?? null,
+      analogyRelationShown: scene.analogyRelationShown ?? null,
+      echoesScene: scene.echoesScene ?? null,
+      supportingElements: asArray(scene.supportingElements),
+      characters: asArray(scene.characters),
+      programmaticOverlays: {
+        diagramLabels: asArray(scene.programmaticOverlays?.diagramLabels),
+      },
+      transitionToNext:
+        typeof scene.transitionToNext === "string"
+          ? scene.transitionToNext
+          : "",
+    };
+  });
+
+  return {
+    ...candidate,
+    videoTitle: batchScript.title,
+    oneIdea: batchScript.oneIdea,
+    aspectRatio: "9:16",
+    upstreamIssues: Array.isArray(candidate.upstreamIssues)
+      ? candidate.upstreamIssues
+      : [],
+    scenes,
+  } as Storyboard;
+}
+
+export async function storyboardNode(state: typeof FilmState.State) {
+  const fullBrief = asObject<Record<string, any>>(state.creativeBrief);
+  const normalizedScript = asObject<Script>(state.script);
+
+  if (
+    !normalizedScript ||
+    !Array.isArray(normalizedScript.beats) ||
+    normalizedScript.beats.length === 0
+  ) {
+    throw new Error(
+      "Storyboard requires a normalized script with at least one beat.",
+    );
+  }
+
+  if (!normalizedScript.title || !normalizedScript.oneIdea) {
+    throw new Error(
+      "Storyboard requires script.title and script.oneIdea before generation.",
+    );
+  }
+
+  // Keep the director-owned visual guidance, but do not send research and reviewer
+  // reports that have already been processed by their own pipeline stages.
+  const compactBrief = {
+    videoTitle: fullBrief.videoTitle ?? normalizedScript.title,
+    oneIdea: fullBrief.oneIdea ?? normalizedScript.oneIdea,
+    domainClassification: fullBrief.domainClassification,
+    mechanism: fullBrief.mechanism,
+    conceptsToCover: fullBrief.conceptsToCover,
+    analogyMap: Array.isArray(fullBrief.analogyMap) ? fullBrief.analogyMap : [],
+    whereAnalogyBreaks: fullBrief.whereAnalogyBreaks,
+    protagonist: fullBrief.protagonist,
+    visualStrategy: fullBrief.visualStrategy,
+    beatMap: Array.isArray(fullBrief.beatMap) ? fullBrief.beatMap : [],
+  };
+
+  const batchSize = getAdaptiveBatchSize(normalizedScript.beats.length);
+
+  const batches: Script["beats"][] = [];
+  for (
+    let index = 0;
+    index < normalizedScript.beats.length;
+    index += batchSize
+  ) {
+    batches.push(normalizedScript.beats.slice(index, index + batchSize));
+  }
+
+  const completed: Storyboard[] = [];
+  let previousBatchContext:
+    | {
+        lastSceneId: number;
+        primarySubject: string;
+        characters: unknown[];
+        supportingElements: string[];
+        visualStyle: string;
+      }
+    | undefined;
+
+  for (let index = 0; index < batches.length; index++) {
+    const batchBeats = batches[index]!;
+    const batchBeatIds = new Set(batchBeats.map((beat) => beat.beatId));
+    const batchCardNumbers = new Set(batchBeats.map((beat) => beat.cardNumber));
+
+    const matchingBeatMap = compactBrief.beatMap.filter((entry: any) => {
+      if (!entry || typeof entry !== "object") return true;
+
+      const id = entry.beatId ?? entry.id;
+      if (typeof id === "string") return batchBeatIds.has(id);
+
+      const cardNumber = entry.cardNumber ?? entry.sceneId;
+      if (Number.isInteger(cardNumber)) {
+        return batchCardNumbers.has(cardNumber);
+      }
+
+      return true;
+    });
+
+    // A batch's narration and duration must describe only its own beats. Retaining the
+    // full-script values here would waste context and confuse models about batch scope.
+    const batchWordCount = batchBeats.reduce(
+      (total, beat) =>
+        total +
+        (typeof beat.wordCount === "number"
+          ? beat.wordCount
+          : (beat.narration.match(/[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*/g) ?? [])
+              .length),
+      0,
+    );
+    const batchDuration = Number(
+      batchBeats
+        .reduce(
+          (total, beat) => total + Number(beat.estimatedDurationSeconds || 0),
+          0,
+        )
+        .toFixed(2),
+    );
+
+    const batchScript: Script = {
+      ...normalizedScript,
+      beats: batchBeats,
+      narration: batchBeats.map((beat) => beat.narration).join(" "),
+      totalWordCount: batchWordCount,
+      estimatedDurationSeconds: batchDuration,
+      durationSumCheck: batchDuration,
+    };
+
+    const batchBrief = {
+      ...compactBrief,
+      beatMap: matchingBeatMap,
+    };
+
+    const input = JSON.stringify({
+      batch: {
+        index: index + 1,
+        total: batches.length,
+        firstSceneId: batchBeats[0]!.cardNumber,
+        lastSceneId: batchBeats[batchBeats.length - 1]!.cardNumber,
+        instruction:
+          "Create scenes only for the beats in this batch. Do not invent scenes for other beats.",
+      },
+      creativeBrief: batchBrief,
+      script: batchScript,
+      previousBatchContext,
+    });
+
+    logEvent("storyboard.batch.start", {
+      batch: index + 1,
+      total: batches.length,
+      scenes: batchBeats.length,
+      firstSceneId: batchBeats[0]!.cardNumber,
+      lastSceneId: batchBeats[batchBeats.length - 1]!.cardNumber,
+      inputChars: input.length,
+    });
+
+    const { data } = await callJson<Storyboard>(
+      `storyboard-batch-${index + 1}`,
+      storyboardAgent,
+      withFeedback(input, state, "storyboard"),
+      1,
+      (candidate) => validateStoryboardOutput(candidate, batchScript),
+      (candidate) => reconcileStoryboardBatch(candidate, batchScript),
+    );
+
+    completed.push(data);
+
+    const lastScene = data.scenes[data.scenes.length - 1]!;
+    previousBatchContext = {
+      lastSceneId: lastScene.sceneId,
+      primarySubject: lastScene.primarySubject,
+      characters: lastScene.characters,
+      supportingElements: lastScene.supportingElements,
+      visualStyle: data.videoStyle,
+    };
+
+    logEvent("storyboard.batch.success", {
+      batch: index + 1,
+      total: batches.length,
+      scenes: data.scenes.length,
+      outputChars: JSON.stringify(data).length,
+    });
+  }
+
+  if (completed.length !== batches.length || completed.length === 0) {
+    throw new Error(
+      `Storyboard generation incomplete: received ${completed.length} of ${batches.length} batches.`,
+    );
+  }
+
+  const first = completed[0]!;
+  const merged: Storyboard = {
+    ...first,
+    videoTitle: normalizedScript.title,
+    oneIdea: normalizedScript.oneIdea,
+    aspectRatio: "9:16",
+    scenes: completed.flatMap((batch) => batch.scenes),
+    upstreamIssues: completed
+      .flatMap((batch) => batch.upstreamIssues ?? [])
+      .filter(
+        (issue, index, all) =>
+          all.findIndex(
+            (candidate) => JSON.stringify(candidate) === JSON.stringify(issue),
+          ) === index,
+      ),
+  };
+
+  // Detect duplicate/missing IDs and ordering mistakes before writing to graph state.
+  validateStoryboardOutput(merged, normalizedScript);
+
+  const sceneIds = merged.scenes.map((scene) => scene.sceneId);
+  if (new Set(sceneIds).size !== sceneIds.length) {
+    throw new Error("Merged storyboard contains duplicate scene IDs.");
+  }
+
+  const raw = JSON.stringify(merged);
+  logEvent("storyboard.complete", {
+    batches: batches.length,
+    scenes: merged.scenes.length,
+    chars: raw.length,
+  });
+
+  return { storyboard: raw, scenes: merged.scenes };
+}
+
+/**
+ * Art direction is not part of the QA package, so it runs once, AFTER QA passes (see workflow.graph.ts),
+ * instead of on every revision pass. A failure here must not discard an otherwise approved package.
  */
 export async function visualStyleNode(state: typeof FilmState.State) {
   try {
@@ -313,17 +747,13 @@ export async function compositionNode(state: typeof FilmState.State) {
     visualStyle: state.visualStyle,
   });
 
-  let raw = "";
-  let parsed: { compositionPlan?: any[] } | any[] = [];
-  try {
-    ({ raw, data: parsed } = await callJson<
-      { compositionPlan?: any[] } | any[]
-    >("composition", compositionPlannerAgent, withFeedback(input, state, "composition")));
-  } catch (error) {
-    if (!isProviderQuotaError(error)) throw error;
-    logEvent("composition.fallback", { reason: "Gemini quota exhausted; using deterministic scene layout." });
-    parsed = fallbackComposition(state.scenes);
-  }
+  const { raw, data: parsed } = await callJson<
+    { compositionPlan?: any[] } | any[]
+  >(
+    "composition",
+    compositionPlannerAgent,
+    withFeedback(input, state, "composition"),
+  );
   const plan = Array.isArray(parsed)
     ? parsed
     : Array.isArray((parsed as any)?.compositionPlan)
@@ -339,32 +769,21 @@ export async function compositionNode(state: typeof FilmState.State) {
   return { compositionPlan: plan };
 }
 
+/**
+ * Runs in parallel with compositionNode after storyboardNode.
+ * Uses storyboard and visualStyle directly rather than compositionPlan so there is no data dependency.
+ */
 export async function continuityNode(state: typeof FilmState.State) {
   const input = JSON.stringify({
     storyboard: state.storyboard,
-    compositionPlan: state.compositionPlan,
+    visualStyle: state.visualStyle,
   });
-  try {
-    const { data } = await callJson(
-      "continuity", continuityAgent, withFeedback(input, state, "continuity"),
-    );
-    return { productionBible: data };
-  } catch (error) {
-    if (!isProviderQuotaError(error)) throw error;
-    logEvent("continuity.fallback", { reason: "Gemini quota exhausted; using storyboard-derived visual identity." });
-    let storyboard: any = {};
-    try { storyboard = JSON.parse(state.storyboard || "{}"); } catch {}
-    return { productionBible: {
-      videoTitle: storyboard.videoTitle || "PARADOX OF PROGRESS",
-      aspectRatio: "9:16",
-      palette: { background: "#F9F8F4", ink: "#111111", red: "#C81D11", green: "#2E7D32", ochre: "#D9B66F", sage: "#A8B9A0" },
-      drawingStyle: { medium: "minimalist flat 2D vector explainer cartoon", outline: "#111111", strokeWidth: 6 },
-      characters: state.scenes.flatMap((x: any) => x.characters || []),
-      propsAndSymbols: [],
-      cardTemplate: { headerSafeZone: "0-14%", artworkZone: "15-74%", captionSafeZone: "75-100%" },
-      captionRules: { header: "uppercase", line1: "black", line2: "crimson" },
-    } };
-  }
+  const { data } = await callJson(
+    "continuity",
+    continuityAgent,
+    withFeedback(input, state, "continuity"),
+  );
+  return { productionBible: data };
 }
 
 export async function visualNode(state: typeof FilmState.State) {
@@ -378,23 +797,11 @@ export async function visualNode(state: typeof FilmState.State) {
     productionBible: state.productionBible,
   });
 
-  let parsed: { imagePrompts?: any[] } | any[] = [];
-  try {
-    ({ data: parsed } = await callJson<{ imagePrompts?: any[] } | any[]>(
-      "visualDirector", visualDirectorAgent, withFeedback(input, state, "visualPrompts"),
-    ));
-  } catch (error) {
-    if (!isProviderQuotaError(error)) throw error;
-    logEvent("visualDirector.fallback", { reason: "Gemini quota exhausted; creating prompts from approved storyboard." });
-    parsed = state.scenes.map((scene: any) => ({
-      sceneId: scene.sceneId, assetType: "central-artwork",
-      prompt: [scene.visualPurpose, scene.visualMetaphor, scene.primarySubject, ...(scene.supportingElements || [])].filter(Boolean).join(". "),
-      negativePrompt: "photorealism, 3D, rendered words, watermark, clutter",
-      requiredElements: [scene.primarySubject, ...(scene.supportingElements || [])].filter(Boolean),
-      mustNotInclude: ["watermarks", "unapproved text"],
-      textOverlays: {},
-    }));
-  }
+  const { data: parsed } = await callJson<{ imagePrompts?: any[] } | any[]>(
+    "visualDirector",
+    visualDirectorAgent,
+    withFeedback(input, state, "visualPrompts"),
+  );
   const prompts = Array.isArray(parsed)
     ? parsed
     : Array.isArray((parsed as any)?.imagePrompts)
@@ -408,7 +815,10 @@ export async function visualNode(state: typeof FilmState.State) {
 
     return {
       ...item,
-      svg: renderSceneSvg(matchingScene, state.productionBible?.videoTitle || "PARADOX OF PROGRESS"),
+      svg: renderSceneSvg(
+        matchingScene,
+        state.productionBible?.videoTitle || "PARADOX OF PROGRESS",
+      ),
       textOverlays: {
         header: matchingScene.headerText ?? item.textOverlays?.header ?? null,
         captionLine1:
@@ -495,7 +905,6 @@ export async function qaNode(state: typeof FilmState.State) {
         "Run the fact-check agent to generate a fact-check report before publication.",
     });
   } else {
-    // A model cannot approve a package simply because a reviewer returned an incomplete response.
     if (factReport.status === "incomplete" || factReport.status === "error") {
       reviewGates.push({
         gate: "epistemic",
@@ -506,7 +915,6 @@ export async function qaNode(state: typeof FilmState.State) {
       });
     }
 
-    // Critical factual errors always block publication.
     const criticalErrors = asArray(factReport.criticalErrors);
     for (const item of criticalErrors) {
       reviewGates.push({
@@ -525,7 +933,6 @@ export async function qaNode(state: typeof FilmState.State) {
       });
     }
 
-    // Material issues block publication unless explicitly marked resolved.
     const materialIssues = asArray(factReport.materialIssues);
     for (const item of materialIssues) {
       const isResolved =
@@ -587,17 +994,16 @@ export async function qaNode(state: typeof FilmState.State) {
     }
   }
 
-  // Missing comprehension reports block publication.
+  // 2. Missing or low-scoring comprehension reports block publication.
   if (!comprehension || Object.keys(comprehension).length === 0) {
     reviewGates.push({
       gate: "storyCraft",
       sceneId: null,
       problem: "Missing comprehension report.",
       requiredFix:
-        "Run the comprehension agent to generate a comprehension report before publication.",
+        "Run the comprehension agent to evaluate script clarity before publication.",
     });
   } else {
-    // A model cannot approve a package simply because a reviewer returned an incomplete response.
     if (
       comprehension.status === "incomplete" ||
       comprehension.status === "error"
@@ -611,152 +1017,100 @@ export async function qaNode(state: typeof FilmState.State) {
       });
     }
 
-    const blockingGaps = asArray(comprehension.blockingGaps);
-    if (
-      comprehension.status === "revise" ||
-      Number(comprehension.score ?? 100) < COMPREHENSION_MIN ||
-      blockingGaps.length > 0
-    ) {
-      const before = reviewGates.length;
-      for (const item of blockingGaps) {
-        reviewGates.push({
-          gate: "storyCraft",
-          sceneId: null,
-          problem: asText(item),
-          requiredFix: "Revise to close the beginner comprehension gap.",
-        });
-      }
-      if (reviewGates.length === before) {
-        reviewGates.push({
-          gate: "storyCraft",
-          sceneId: null,
-          problem:
-            comprehension.summary ??
-            `Comprehension score below threshold (${comprehension.score ?? "unknown"}/100).`,
-        });
-      }
+    const compScore = Number(
+      comprehension.overallScore ?? comprehension.comprehensionScore ?? NaN,
+    );
+    if (!Number.isNaN(compScore) && compScore < COMPREHENSION_MIN) {
+      reviewGates.push({
+        gate: "storyCraft",
+        sceneId: null,
+        problem: `Comprehension score ${compScore} is below minimum threshold ${COMPREHENSION_MIN}.`,
+        requiredFix:
+          "Clarify confusing transitions, jargon, or pacing in the script.",
+      });
+    }
+
+    for (const item of asArray(comprehension.confusionPoints)) {
+      reviewGates.push({
+        gate: "storyCraft",
+        sceneId:
+          (typeof item === "object" && item !== null
+            ? (item as any).sceneId
+            : null) ?? null,
+        problem: asText(
+          typeof item === "object" && item !== null
+            ? ((item as any).problem ?? (item as any).issue ?? item)
+            : item,
+        ),
+        requiredFix: "Resolve the viewer confusion point in the script.",
+      });
     }
   }
 
-  const rawQualityAverage =
-    qa?.creativeScores?.average ?? qa?.storytellingScores?.average;
-  const rawQualityNumber = Number(rawQualityAverage);
-  const qualityAverage =
-    Number.isFinite(rawQualityNumber) && rawQualityNumber > 10 && rawQualityNumber <= 100
-      ? rawQualityNumber / 10
-      : rawQualityNumber;
-  if (!qa) {
-    // gate "judgment" is never routed to a stage: re-running the script cannot fix a failed judge call.
-    reviewGates.push({
-      gate: "judgment",
-      sceneId: null,
-      problem:
-        "Independent LLM QA did not complete; release cannot be approved from deterministic checks alone.",
-    });
-  } else if (!Number.isFinite(qualityAverage)) {
+  // 3. Deterministic package validator issues & LLM creative quality threshold.
+  const validatorIssues = asArray(validatorReport?.blockingIssues);
+  const dimensionValues =
+    qa?.dimensions && typeof qa.dimensions === "object"
+      ? Object.values(qa.dimensions)
+          .map(Number)
+          .filter((n) => !Number.isNaN(n))
+      : [];
+  const averageQuality =
+    dimensionValues.length > 0
+      ? dimensionValues.reduce((sum, n) => sum + n, 0) / dimensionValues.length
+      : null;
+
+  if (averageQuality !== null && averageQuality < QUALITY_MIN) {
     reviewGates.push({
       gate: "storyCraft",
       sceneId: null,
-      problem:
-        "QA did not return a valid creative quality average on a 1-10 or legacy 0-100 scale; release score is unavailable.",
+      problem: `Average creative quality score (${averageQuality.toFixed(2)}/10) is below ${QUALITY_MIN}/10.`,
       requiredFix:
-        "Return the arithmetic mean in creativeScores.average on the 1-10 scale.",
-    });
-  } else if (qualityAverage < QUALITY_MIN) {
-    reviewGates.push({
-      gate: "storyCraft",
-      sceneId: null,
-      problem: `Creative quality average ${qualityAverage}/10 is below the ${QUALITY_MIN}/10 release target.`,
-      requiredFix: "Improve the lowest-scoring dimensions and rerun QA.",
+        "Strengthen narrative clarity, visual metaphor, and scene pacing.",
     });
   }
 
-  // ---- Mechanical status: any blocking issue (either layer) or an explicit "revise" wins. ----
-  const blocking = [
-    ...validatorReport.blockingIssues,
-    ...llmBlocking,
-    ...reviewGates,
-  ];
-  const status: "pass" | "revise" =
-    blocking.length > 0 || llmStatus === "revise" ? "revise" : "pass";
+  const allBlocking = [...validatorIssues, ...reviewGates, ...llmBlocking];
+  const passed =
+    allBlocking.length === 0 && llmStatus !== "revise" && llmStatus !== "fail";
 
-  // ---- Where to restart: the earliest stage with a defect, from EVERY layer (not just the validator). ----
-  const stages: Stage[] = [
-    ...validatorReport.blockingIssues.map(stageForIssue),
-    ...reviewGates
-      .filter((g) => g.gate !== "judgment")
-      .map((g) => stageForIssue(g)),
-  ];
-  if (llmBlocking.length > 0 || llmStatus === "revise") {
-    stages.push(isStage(qa?.reviseTarget) ? qa.reviseTarget : "script");
+  const candidateStages: Stage[] = allBlocking
+    .map((issue) => stageForIssue(issue))
+    .filter((s): s is Stage => Boolean(s));
+
+  const explicitTarget = isStage(qa?.reviseTarget) ? qa.reviseTarget : null;
+  if (explicitTarget) {
+    candidateStages.push(explicitTarget);
   }
-  // No stage means nothing upstream can fix it (e.g. the judge itself failed): stop instead of looping.
-  const reviseTarget =
-    status === "revise" && stages.length > 0
-      ? earliestStage(stages)
-      : undefined;
 
-  const instructions = [
-    ...(Array.isArray(qa?.revisionInstructions) ? qa.revisionInstructions : []),
-    ...asArray(comprehension.revisionInstructions),
-    ...asArray(factReport?.correctedClaimSuggestions),
-  ].map(asText);
+  const reviseTarget = passed
+    ? null
+    : (earliestStage(candidateStages) ?? "script");
 
-  const qaFeedback =
-    status === "revise" ? buildFeedback(blocking, instructions) : "";
+  const feedback = passed ? null : buildFeedback(allBlocking, qa);
 
-  const rawCreativeScores = qa?.creativeScores ?? qa?.storytellingScores ?? null;
-  const creativeScores =
-    rawCreativeScores &&
-    typeof rawCreativeScores === "object" &&
-    Number.isFinite(qualityAverage)
-      ? { ...rawCreativeScores, average: Number(qualityAverage.toFixed(1)) }
-      : rawCreativeScores;
-
-  const report = JSON.stringify({
-    status,
-    reviseTarget: reviseTarget ?? null,
-    timingAudit: validatorReport.computed,
-    blockingIssues: blocking,
-    reviewItems: validatorReport.reviewItems,
-    publicationCaveats,
-    factReview: qa?.factReview ?? factReport,
-    comprehensionReview: comprehension,
-    analogyReview: qa?.analogyReview ?? [],
-    depictionReview: qa?.depictionReview ?? [],
-    creativeScores,
-    summary: typeof qa?.report === "string" ? qa.report : null,
-    weightedQualityAverage: Number.isFinite(qualityAverage)
-      ? Number((qualityAverage * 10).toFixed(1))
-      : null,
-    creativeQualityAverage: Number.isFinite(qualityAverage)
-      ? Number(qualityAverage.toFixed(1))
-      : null,
-    qualityScoreScale: "1-10 arithmetic mean",
-    releaseThresholds: {
-      creativeQualityMinimum: QUALITY_MIN,
-      weightedQualityMinimum: Number((QUALITY_MIN * 10).toFixed(1)),
-      comprehensionMinimum: COMPREHENSION_MIN,
-      factualCriticalErrorsAllowed: 0,
-      strictSourceVerification: STRICT_SOURCE_VERIFICATION,
-    },
-  });
-
-  logEvent("qa.result", {
-    status,
-    reviseTarget: reviseTarget ?? null,
-    blocking: blocking.length,
-    caveats: publicationCaveats.length,
-    quality: Number.isFinite(qualityAverage) ? qualityAverage : null,
+  logEvent("qa.complete", {
+    passed,
+    blockingCount: allBlocking.length,
+    averageQuality,
+    reviseTarget,
+    revisionCount: (state.revisionCount ?? 0) + (passed ? 0 : 1),
   });
 
   return {
-    qualityReport: report,
-    qualityStatus: status,
+    qualityStatus: passed ? "pass" : "revise",
+    qaReport: {
+      ...(qa ?? {}),
+      validatorReport,
+      reviewGates,
+      publicationCaveats,
+      averageQuality,
+      blockingIssues: allBlocking,
+    },
     reviseTarget,
-    qaFeedback,
-    validatorReport,
-    revisionCount:
-      status === "revise" ? state.revisionCount + 1 : state.revisionCount,
+    revisionFeedback: feedback,
+    revisionCount: passed
+      ? (state.revisionCount ?? 0)
+      : (state.revisionCount ?? 0) + 1,
   };
 }
