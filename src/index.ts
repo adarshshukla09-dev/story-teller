@@ -1,89 +1,75 @@
-import { pathToFileURL } from "node:url";
+import fs from "node:fs/promises";
+import path from "node:path";
 
-import { filmGraph, RECURSION_LIMIT } from "./graphs/workflow.graph.js";
-import { saveResult } from "./lib/utils/saveResult.js";
-import { logEvent, newRunId, runWithId } from "./lib/run-context.js";
+import { productionGraph } from "./graphs/workflow.graph.js";
+import { createProductionJson } from "./agents/createProductionJson.js";
 
-type WorkflowOptions = { audience?: string; sourceMaterials?: unknown[] };
-type FilmResult = Awaited<ReturnType<typeof filmGraph.invoke>>;
-export type WorkflowOutcome = {
-  result: FilmResult;
-  savedPath: string;
-  /** true only when deterministic validation, fact review, comprehension and QA all passed. */
-  approved: boolean;
-};
-
-// Single-flight: the same topic + audience can only run once at a time. Starting a second identical run
-// would duplicate expensive local inference work.
-const inFlight = new Map<string, Promise<WorkflowOutcome>>();
-
-export function runFilmWorkflow(
-  topic: string,
-  options: WorkflowOptions = {},
-): Promise<WorkflowOutcome> {
-  if (!topic || !topic.trim()) throw new Error("A non-empty topic is required.");
-
-  const cleanTopic = topic.trim();
-  const audience = options.audience ?? "curious beginner";
-  const key = `${cleanTopic.toLowerCase()}|${audience.toLowerCase()}`;
-
-  const existing = inFlight.get(key);
-  if (existing) {
-    logEvent("workflow.duplicate_ignored", { topic: cleanTopic });
-    return existing;
-  }
-
-  const promise = execute(cleanTopic, audience, options).finally(() => inFlight.delete(key));
-  inFlight.set(key, promise);
-  return promise;
+async function writeJsonAtomically(filePath: string, value: unknown): Promise<void> {
+  const tempPath = `${filePath}.tmp`;
+  await fs.writeFile(tempPath, JSON.stringify(value, null, 2), "utf-8");
+  await fs.rename(tempPath, filePath);
 }
 
-async function execute(topic: string, audience: string, options: WorkflowOptions): Promise<WorkflowOutcome> {
-  const runId = newRunId();
+async function generateExplainer(topic: string) {
+  const slug = topic
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "") || "video_title";
 
-  return runWithId(runId, async () => {
-    logEvent("workflow.start", { topic, audience, recursionLimit: RECURSION_LIMIT });
+  const outputDir = path.resolve(process.cwd(), "src", "result", slug);
+  await fs.mkdir(outputDir, { recursive: true });
 
-    // stream() instead of invoke() so the latest state survives a crash.
-    let latest: FilmResult | undefined;
-    try {
-      const stream = await filmGraph.stream(
-        { topic, audience, sourceMaterials: options.sourceMaterials ?? [] },
-        { streamMode: "values", recursionLimit: RECURSION_LIMIT },
-      );
-      for await (const state of stream) latest = state as FilmResult;
-    } catch (error) {
-      logEvent("workflow.failed", { error: String(error).slice(0, 500) });
-      if (latest) {
-        const savedPath = await saveResult({ failed: true, error: String(error), state: latest }, "failed");
-        logEvent("workflow.partial_saved", { savedPath });
-      }
-      throw error;
+  let latestState: Record<string, unknown> | undefined;
+  try {
+    const stream = await productionGraph.stream(
+      { topic },
+      { streamMode: "values", recursionLimit: 50 },
+    );
+    for await (const state of stream) {
+      latestState = state as Record<string, unknown>;
+      // Persist after every completed graph step, so process-level failures
+      // still leave the latest known state on disk.
+      await writeJsonAtomically(path.join(outputDir, `${slug}.progress.json`), latestState);
     }
 
-    if (!latest) throw new Error("Workflow produced no state.");
+    const result = latestState;
+    if (!result) throw new Error("Production graph completed without yielding state.");
 
-    const savedPath = await saveResult(latest);
-    const approved = latest.qualityStatus === "pass";
-    logEvent("workflow.completed", { topic, qualityStatus: latest.qualityStatus, approved, revisions: latest.revisionCount, savedPath });
-    return { result: latest, savedPath, approved };
-  });
-}
+    console.log("\n========== FINAL SCRIPT ==========\n");
+    console.log(result.script);
+    console.log("\n========== FINAL PRODUCTION ==========\n");
+    console.log(result.finalOutput);
 
-// ---- CLI: runs only when this file is executed directly, never on import. ----
-//   npm run dev -- "Explain Docker in computer science"
-//   DEMO_TOPIC="How vaccines work" RUN_DEMO=true npm run dev
-const isMain = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]!).href;
+    await writeJsonAtomically(path.join(outputDir, `${slug}.json`), result);
+    const outputContent = typeof result.finalOutput === "string"
+      ? result.finalOutput
+      : JSON.stringify(result.finalOutput, null, 2);
+    await fs.writeFile(path.join(outputDir, `${slug}.md`), outputContent, "utf-8");
 
-if (isMain) {
-  const topic = process.argv.slice(2).join(" ").trim() || (process.env.RUN_DEMO === "true" ? process.env.DEMO_TOPIC || "Explain Docker in computer science" : "");
+    const finalProduction = typeof result.finalOutput === "string"
+      ? JSON.parse(result.finalOutput)
+      : result.finalOutput;
+    await createProductionJson(finalProduction, outputDir);
+    await fs.rm(path.join(outputDir, `${slug}.progress.json`), { force: true });
 
-  if (!topic) {
-    console.log('Usage: npm run dev -- "<topic>"   (or RUN_DEMO=true [DEMO_TOPIC="..."] npm run dev)');
-  } else {
-    runFilmWorkflow(topic).catch((error) => {
-      console.error("Workflow failed:", error);
-      process.exitCode = 1;
-    });
+    console.log(`\nAll production files saved to ${outputDir}`);
+  } catch (error) {
+    const failure = {
+      failed: true,
+      topic,
+      error: error instanceof Error ? error.message : String(error),
+      savedAt: new Date().toISOString(),
+      state: latestState ?? { topic },
+    };
+    await writeJsonAtomically(path.join(outputDir, `${slug}.failed.json`), failure);
+    await fs.writeFile(
+      path.join(outputDir, `${slug}.failed.md`),
+      `# Production run failed\n\n${failure.error}\n\nLatest workflow state is saved in \`${slug}.failed.json\`.`,
+      "utf-8",
+    );
+    console.error(`Production failed; latest progress saved to ${path.join(outputDir, `${slug}.failed.json`)}`);
+    throw error;
   }
 }
+
+generateExplainer("The Paradox of Progress").catch(console.error);
