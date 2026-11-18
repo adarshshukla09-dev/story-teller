@@ -1,1264 +1,621 @@
-import { FilmState } from "./workflow.state.js";
-import {
-  groundResearchDossier,
-  normalizeSourceMaterials,
-} from "../lib/source-grounding.js";
-
-import { directorAgent } from "../agents/director.agent.js";
-import { researchAgent } from "../agents/research.agent.js";
-import { strategyAgent } from "../agents/strategy.agent.js";
-import { factCheckAgent } from "../agents/fact-check.agent.js";
 import { comprehensionAgent } from "../agents/comprehension.agent.js";
+import { researchAgent } from "../agents/research.agent.js";
+import { factCheckAgent } from "../agents/fact-check.agent.js";
+import { strategyAgent } from "../agents/strategy.agent.js";
+import { directorAgent } from "../agents/director.agent.js";
 import { scriptwriterAgent } from "../agents/scriptwriter.agent.js";
+import { qaAgent } from "../agents/QA.agent.js";
+import { artDirectionAgent } from "../agents/artDirectionAgent.agent.js";
 import { storyboardAgent } from "../agents/storyboard.agent.js";
+import { continuityAgent } from "../agents/continuity.agent.js";
 import { visualDirectorAgent } from "../agents/visual-director.agent.js";
 import { svgIllustratorAgent } from "../agents/svg-illustrator.agent.js";
-import { continuityAgent } from "../agents/continuity.agent.js";
-import {
-  buildFeedback,
-  earliestStage,
-  isStage,
-  normalizeScript,
-  qaAgent,
-  stageForIssue,
-  withFeedback,
-  type Stage,
-} from "../agents/QA.agent.js";
-import { compositionPlannerAgent } from "../agents/compositionPlannerAgent.agent.js";
-import { artDirectionAgent } from "../agents/artDirectionAgent.agent.js";
+import type {
+  ProductionState,
+  ProductionStateType,
+  FactCheckResult,
+} from "./workflow.state.js";
+import { FactCheckResultSchema } from "../schema/factCheck.schema.js";
+import { extractSvgResponse } from "../utils/svgResponseParser.js";
+import { removeSvgTextElements, validateSvgArtwork } from "../services/svg-renderer.service.js";
+import { finalQAagent } from "../agents/QA.agent.js";
 
-import { validatePackage } from "../skills/custom/skills/qa/validate_package.js";
-import { envNumber, logEvent } from "../lib/run-context.js";
-import { validateSvgArtwork } from "../services/svg-renderer.service.js";
-import type { Script } from "../schema/script.schema.js";
-import type { Storyboard } from "../schema/storyboard.schema.js";
+const MAX_SCRIPT_REVISIONS = 2;
 
-// Release thresholds (env-overridable so they can be tuned without code changes).
-// QA's ten creative dimensions are scored 1-10. Translate legacy 0-100
-// environment overrides to the same 1-10 scale; the default target is 8.5/10.
-const configuredQualityMinimum = envNumber("QA_MIN_QUALITY", 85);
-const QUALITY_MIN =
-  configuredQualityMinimum > 10
-    ? configuredQualityMinimum / 10
-    : configuredQualityMinimum;
-const COMPREHENSION_MIN = envNumber("QA_MIN_COMPREHENSION", 80);
-
-// Without retrieval/grounding the research agent marks EVERY claim "verification required", and the
-// fact reviewer repeats that list. A revision cannot fix it, so by default it is reported as a
-// publication caveat instead of blocking (and burning) every revision pass.
-const STRICT_SOURCE_VERIFICATION =
-  process.env.STRICT_SOURCE_VERIFICATION === "true";
-
-function parseAgentJson<T = any>(result: string): T {
-  if (typeof result !== "string" || !result.trim()) {
-    throw new Error("AI agent returned an empty response.");
+function parseFactCheckResult(result: unknown): FactCheckResult {
+  try {
+    const parsed = typeof result === "string" ? JSON.parse(result) : result;
+    return FactCheckResultSchema.parse(parsed);
+  } catch (error) {
+    console.error("Fact-check validation failed:", error);
+    throw new Error(
+      "Fact-check agent returned an invalid result matching neither the expected JSON nor FactCheckResult schema.",
+      { cause: error },
+    );
   }
+}
 
-  const cleaned = result
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
+function extractJsonObject(raw: string): any {
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  // Agents occasionally prepend a markdown heading or explanation even when
+  // asked for JSON. Extract the first complete JSON object instead of parsing
+  // the whole response as if it were JSON.
+  const start = cleaned.indexOf("{");
+  if (start < 0) throw new Error("No JSON object found in agent response.");
 
-  const start = cleaned.search(/[{\[]/);
-
-  if (start === -1) {
-    throw new Error("No JSON object or array found.");
-  }
-
-  const stack: string[] = [];
+  let depth = 0;
   let inString = false;
   let escaped = false;
-
   for (let i = start; i < cleaned.length; i++) {
     const char = cleaned[i];
-
     if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
       continue;
     }
-
-    if (char === '"') {
-      inString = true;
-      continue;
-    }
-
-    if (char === "{" || char === "[") {
-      stack.push(char);
-    } else if (char === "}" || char === "]") {
-      const opening = stack.pop();
-
-      if (
-        (char === "}" && opening !== "{") ||
-        (char === "]" && opening !== "[")
-      ) {
-        throw new Error("Mismatched JSON brackets.");
-      }
-
-      if (stack.length === 0) {
-        try {
-          return JSON.parse(cleaned.slice(start, i + 1)) as T;
-        } catch (error) {
-          throw new Error("Invalid JSON returned by AI agent.", {
-            cause: error,
-          });
-        }
-      }
+    if (char === '"') inString = true;
+    else if (char === "{") depth++;
+    else if (char === "}" && --depth === 0) {
+      return JSON.parse(cleaned.slice(start, i + 1));
     }
   }
-
-  throw new Error("Incomplete JSON response: model output was truncated.");
+  throw new Error("Agent response contains an incomplete JSON object.");
 }
 
-/** Model-produced JSON fields are untrusted: some models emit false/null instead of []. */
-function asArray<T = any>(value: unknown): T[] {
-  return Array.isArray(value) ? (value as T[]) : [];
-}
+export async function storyboardNode(state: ProductionStateType) {
+  const result = await storyboardAgent(`
+DIRECTOR BRIEF:
+${state.directorOutput}
 
-function shortReason(error: unknown): string {
-  const cause = (error as { cause?: unknown } | undefined)?.cause;
-  const msg =
-    cause instanceof Error
-      ? cause.message
-      : String(error instanceof Error ? error.message : error);
-  return msg.split("\n")[0]!.slice(0, 200);
-}
+APPROVED SCRIPT:
+${state.script}
 
-/**
- * Call an agent and parse its JSON. A truncated or fenced/garbled reply is retried once with an explicit
- * repair instruction instead of crashing the whole (expensive) workflow.
- */
-async function callJson<T = any>(
-  agent: string,
-  run: (input: string) => Promise<string>,
-  input: string,
-  retries = 2,
-  validate?: (data: T) => void,
-  normalize?: (data: any) => T,
-): Promise<{ raw: string; data: T }> {
-  let prompt = input;
-  let lastError: unknown;
+Create the canonical storyboard for a 2D hand-drawn stickman comic video.
+Preserve beat order and narration verbatim.
+Use the Director's approved analogy map and claim ledger.
+For each scene, specify:
+- sceneId (1, 2, 3...)
+- Top Header Title (short uppercase topic title, e.g., "${state.topic.toUpperCase()}")
+- Central Stickman Visual Action & Environment
+- Bottom Key Phrase (1–2 short uppercase lines derived from the most important idea or phrase in that scene's narration; mark key words for red emphasis)
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const raw = await run(prompt);
-      const parsed = parseAgentJson<T>(raw);
-      // Deterministic repair of fields the application owns (see reconcileStoryboardBatch).
-      // Runs before validation, so validation checks the final, repaired artifact.
-      const data = normalize ? normalize(parsed) : parsed;
-      // JSON syntax alone is not enough: a response such as {} is valid JSON
-      // but is not a usable artifact. Run stage-specific contract checks here
-      // so malformed-but-parseable output receives the same repair attempts.
-      validate?.(data);
-      return { raw, data };
-    } catch (error) {
-      lastError = error;
-      const reason = shortReason(error);
-      logEvent("agent.json_parse_failed", {
-        agent,
-        attempt: attempt + 1,
-        reason,
-      });
-      prompt = `${input}
-
-IMPORTANT: Your previous response was invalid or did not satisfy the required output contract.
-Validation/parsing error: ${reason}
-
-Generate the complete response again. Do not return an empty object, an empty array,
-or a partial placeholder.
-
-STRICT REQUIREMENTS:
-1. Return ONLY valid JSON, with the exact top-level structure requested.
-2. Do not use Markdown code fences or explanations outside JSON.
-3. Include every required field and every required array.
-4. Preserve source narration, IDs, captions, and durations exactly where the contract requires it.
-5. Use only enum values explicitly listed in the supplied contract.
-6. Close every object and array; do not use trailing commas.
-7. Keep descriptions concise enough to complete the entire artifact.
-
-Return one complete JSON object.`;
-    }
-  }
-  throw lastError;
-}
-
-/** State may hold either raw agent strings (old runs) or parsed objects (new runs). */
-function asObject<T = any>(value: unknown): T {
-  return (typeof value === "string" ? parseAgentJson<T>(value) : value) as T;
-}
-
-function getAdaptiveBatchSize(totalScenes: number): number {
-  if (process.env.STORYBOARD_BATCH_SIZE) {
-    return Math.max(
-      1,
-      Math.min(4, Math.floor(Number(process.env.STORYBOARD_BATCH_SIZE))),
-    );
-  }
-  if (totalScenes <= 6) return 2;
-  if (totalScenes <= 15) return 3;
-  return 4;
-}
-
-export async function researchNode(state: typeof FilmState.State) {
-  // Normalize source records once, then deterministically validate every model citation.
-  const suppliedSources = normalizeSourceMaterials(state.sourceMaterials ?? []);
-  const { data } = await callJson(
-    "research",
-    researchAgent,
-    JSON.stringify({
-      topic: state.topic,
-      suppliedSources,
-      audience: state.audience ?? "curious beginner",
-    }),
-  );
-  return { researchDossier: groundResearchDossier(data, suppliedSources) };
-}
-
-export async function strategyNode(state: typeof FilmState.State) {
-  try {
-    const { data } = await callJson(
-      "strategy",
-      strategyAgent,
-      JSON.stringify({
-        topic: state.topic,
-        researchDossier: state.researchDossier,
-      }),
-    );
-    return { explanationStrategy: data };
-  } catch (error) {
-    const reason = shortReason(error);
-    if (!/timeout|exceeded\s+\d+\s*ms|aborted/i.test(reason)) throw error;
-
-    // Keep a slow local model from discarding the entire run. This fallback
-    // carries the research agent's own concepts into the Director stage.
-    const dossier = (state.researchDossier ?? {}) as Record<string, any>;
-    const concepts = asArray<any>(dossier.conceptMap ?? dossier.prerequisites)
-      .map((item) =>
-        typeof item === "string"
-          ? item
-          : String(item?.concept ?? item?.name ?? item?.description ?? ""),
-      )
-      .filter(Boolean)
-      .slice(0, 5);
-    const misconceptions = asArray<any>(dossier.misconceptions)
-      .map((item) =>
-        typeof item === "string"
-          ? item
-          : String(item?.misconception ?? item?.claim ?? item?.description ?? ""),
-      )
-      .filter(Boolean)
-      .slice(0, 4);
-    const coreIdea = String(
-      dossier.onePortableIdea ?? `Explain the central idea behind ${state.topic}.`,
-    );
-
-    logEvent("strategy.fallback", {
-      reason,
-      concepts: concepts.length,
-      misconceptions: misconceptions.length,
-    });
-
-    return {
-      explanationStrategy: {
-        domain: dossier.domain ?? "General",
-        selectedFormat: /paradox/i.test(state.topic) ? "Paradox" : "Mechanism",
-        rationale: "Fallback plan built from the research dossier after strategy generation timed out.",
-        audienceModel: dossier.audienceAssumptions ?? "Curious beginner; explain terms before using them.",
-        learningObjectives: [coreIdea],
-        conceptSequence: concepts.length ? concepts : [coreIdea],
-        misconceptionPlan: misconceptions,
-        analogyPlan: {
-          useAnalogy: false,
-          decision: "Prefer direct explanation or a diagram unless a faithful analogy is clear.",
-          limits: "Do not let a metaphor replace the researched mechanism.",
-        },
-        narrativeBeats: [
-          "Open with the viewer's central question.",
-          ...concepts.slice(0, 3).map((concept) => `Explain: ${concept}`),
-          `Resolve with the central idea: ${coreIdea}`,
-        ].slice(0, 5),
-        visualApproach: "Use direct depiction, a comparison, or a simple process diagram that matches the topic.",
-        comprehensionChecks: ["Can the viewer explain the central idea in one sentence?"],
-        domainGuardrails: asArray(dossier.domainSafetyNotes ?? dossier.disputedOrUncertainPoints),
-      },
-    };
-  }
-}
-
-export async function directorNode(state: typeof FilmState.State) {
-  const basePayload = {
-    topic: state.topic,
-    researchDossier: state.researchDossier,
-    explanationStrategy: state.explanationStrategy,
-  };
-  const directorPrompt = withFeedback(
-    JSON.stringify(basePayload),
-    state,
-    "brief",
-  );
+OUTPUT CONTRACT:
+- Return exactly one JSON object, with no markdown, headings, commentary, or code fences.
+- The object must contain the canonical storyboard fields: videoTitle, oneIdea, videoStyle, aspectRatio ("9:16"), timingMode, cardTemplate, scenes, and upstreamIssues.
+- scenes must be a non-empty array. Each scene must preserve the approved script beat order and narration verbatim, and include the complete canonical scene fields from the storyboard contract.
+- Do not return the storyboard skill, these instructions, or an explanation of your process.
+`);
 
   try {
-    const { data } = await callJson(
-      "director",
-      (prompt: string) => {
-        // Safely bridge string-based callJson retries with directorAgent's structured input
-        try {
-          const parsed = JSON.parse(prompt);
-          return directorAgent(parsed);
-        } catch {
-          return directorAgent({
-            ...basePayload,
-            feedback: prompt,
-          } as any);
-        }
-      },
-      directorPrompt,
-    );
-
-    // Stored as an object, not a JSON string, so every later stage and the validator read the same data.
-    return { creativeBrief: data };
+    const storyboard = typeof result === "string" ? extractJsonObject(result) : result;
+    if (!Array.isArray(storyboard?.scenes) || storyboard.scenes.length === 0) {
+      throw new Error("storyboard.scenes must be a non-empty array.");
+    }
+    return { storyboard: JSON.stringify(storyboard) };
   } catch (error) {
-    const reason = shortReason(error);
-    if (!/timeout|exceeded\s+\d+\s*ms|aborted/i.test(reason)) throw error;
-
-    const dossier = (state.researchDossier ?? {}) as Record<string, any>;
-    const strategy = asObject<Record<string, any>>(state.explanationStrategy);
-    const oneIdea = String(
-      dossier.onePortableIdea ?? `Explain the central idea behind ${state.topic}.`,
-    );
-    const conceptList = asArray<any>(dossier.conceptMap ?? dossier.prerequisites)
-      .map((item) =>
-        typeof item === "string"
-          ? item
-          : String(item?.concept ?? item?.name ?? item?.description ?? ""),
-      )
-      .filter(Boolean)
-      .slice(0, 4);
-    const claims = asArray<any>(dossier.claims).slice(0, 8).map((claim, index) => ({
-      id: String(claim?.id ?? `UNVERIFIED_${index + 1}`),
-      safeWording: String(claim?.claim ?? ""),
-      status: "simplified",
-      confidence: "unverified",
-      epistemicStatus: "unverified",
-      needsVerification: true,
-      ...(claim?.sourceId ? { sourceId: claim.sourceId } : {}),
-    }));
-    const stages = ["Hook", "Question", "Mechanism", "Aha", "Payoff"];
-    const beatMap = stages.map((stage, index) => ({
-      cardNumber: index + 1,
-      stage,
-      connector: index === 0 ? "START" : index === 1 ? "BUT" : "THEREFORE",
-      purpose: [
-        "Open the viewer's central question.",
-        "Establish the key context or misconception.",
-        "Explain the researched concept sequence.",
-        "Synthesize how the explanation resolves the question.",
-        "State the takeaway and its important boundary.",
-      ][index],
-      claimIds: [],
-      isAhaCard: index === 3,
-    }));
-
-    logEvent("director.fallback", { reason, claims: claims.length });
-    return {
-      creativeBrief: {
-        videoTitle: String(state.topic).trim().toUpperCase().slice(0, 48),
-        oneIdea,
-        domainClassification: dossier.domain ?? "General explainer",
-        mechanism: conceptList.join(" → ") || oneIdea,
-        conceptsToCover: conceptList.length ? conceptList : [oneIdea],
-        analogyMap: [],
-        whereAnalogyBreaks: "No analogy selected; use direct depiction or a diagram unless research supports a faithful mapping.",
-        protagonist: "No protagonist required; follow the idea or process directly.",
-        visualStrategy: strategy.visualApproach ?? "Direct depiction, comparison, or simple process diagram.",
-        estimatedCardCount: beatMap.length,
-        durationTargetSeconds: 60,
-        beatMap,
-        claimLedger: claims.length
-          ? claims
-          : [{
-              id: "UNVERIFIED_CORE",
-              safeWording: oneIdea,
-              status: "simplified",
-              confidence: "unverified",
-              epistemicStatus: "unverified",
-              needsVerification: true,
-            }],
-        domainGuardrails: asArray(dossier.domainSafetyNotes ?? dossier.disputedOrUncertainPoints),
-      },
-    };
-  }
-}
-
-export async function scriptNode(state: typeof FilmState.State) {
-  const brief = asObject(state.creativeBrief);
-  const { data } = await callJson<Script>(
-    "scriptwriter",
-    scriptwriterAgent,
-    withFeedback(
-      JSON.stringify({
-        creativeBrief: brief,
-        researchDossier: state.researchDossier,
-        explanationStrategy: state.explanationStrategy,
-      }),
-      state,
-      "script",
-    ),
-  );
-
-  // Beats are the single source of truth: narration, word counts and duration sum are recomputed in code.
-  return { script: normalizeScript(data) };
-}
-
-export async function factCheckNode(state: typeof FilmState.State) {
-  const { data } = await callJson(
-    "factCheck",
-    factCheckAgent,
-    JSON.stringify({
-      topic: state.topic,
-      researchDossier: state.researchDossier,
-      explanationStrategy: state.explanationStrategy,
-      script: asObject(state.script),
-    }),
-  );
-  return { factCheckReport: data };
-}
-
-export async function comprehensionNode(state: typeof FilmState.State) {
-  const { data } = await callJson(
-    "comprehension",
-    comprehensionAgent,
-    JSON.stringify({
-      topic: state.topic,
-      researchDossier: state.researchDossier,
-      explanationStrategy: state.explanationStrategy,
-      script: asObject(state.script),
-    }),
-  );
-  return { comprehensionReport: data };
-}
-
-const STORYBOARD_COMPOSITION_TYPES = new Set([
-  "character-and-environment",
-  "top-bottom-comparison",
-  "foreground-background-contrast",
-  "line-chart",
-  "process-flow",
-  "cutaway-magnifier",
-]);
-
-/**
- * Validate semantic storyboard requirements, not just JSON syntax.
- * This prevents parseable placeholders such as {} from reaching workflow state.
- */
-function validateStoryboardOutput(data: Storyboard, script: Script): void {
-  if (!data || typeof data !== "object" || Array.isArray(data)) {
-    throw new Error("Storyboard must be a JSON object.");
-  }
-  if (!Array.isArray(data.scenes)) {
-    throw new Error("Storyboard must contain a scenes array.");
-  }
-  if (!Array.isArray(script.beats) || script.beats.length === 0) {
-    throw new Error("Normalized script must contain at least one beat.");
-  }
-  if (data.scenes.length !== script.beats.length) {
+    const responseExcerpt = typeof result === "string"
+      ? result.replace(/\s+/g, " ").slice(0, 240)
+      : "<non-string response>";
     throw new Error(
-      `Storyboard scene count (${data.scenes.length}) must equal script beat count (${script.beats.length}).`,
+      `Storyboard agent did not return a usable canonical JSON storyboard: ${error}. Response began: ${JSON.stringify(responseExcerpt)}`,
+      { cause: error },
     );
-  }
-  if (data.videoTitle !== script.title) {
-    throw new Error("Storyboard videoTitle must exactly match script.title.");
-  }
-  if (data.oneIdea !== script.oneIdea) {
-    throw new Error("Storyboard oneIdea must exactly match script.oneIdea.");
-  }
-  if (data.aspectRatio !== "9:16") {
-    throw new Error('Storyboard aspectRatio must be "9:16".');
-  }
-  if (!Array.isArray(data.upstreamIssues)) {
-    throw new Error("Storyboard upstreamIssues must be an array.");
-  }
-  if (
-    !data.cardTemplate ||
-    typeof data.cardTemplate !== "object" ||
-    !data.cardTemplate.headerPosition ||
-    !data.cardTemplate.artworkPosition ||
-    !data.cardTemplate.captionPosition
-  ) {
-    throw new Error("Storyboard cardTemplate is missing a required position.");
-  }
-
-  for (let index = 0; index < script.beats.length; index++) {
-    const beat = script.beats[index]!;
-    const scene = data.scenes[index] as any;
-    const label = `Scene ${index + 1}`;
-
-    if (!scene || typeof scene !== "object" || Array.isArray(scene)) {
-      throw new Error(`${label} must be an object.`);
-    }
-    if (scene.sceneId !== beat.cardNumber) {
-      throw new Error(
-        `${label} sceneId must equal source beat cardNumber ${beat.cardNumber}.`,
-      );
-    }
-    if (
-      !Array.isArray(scene.sourceBeatIds) ||
-      scene.sourceBeatIds.length !== 1 ||
-      scene.sourceBeatIds[0] !== beat.beatId
-    ) {
-      throw new Error(
-        `${label} sourceBeatIds must contain only ${beat.beatId}.`,
-      );
-    }
-    if (scene.narration !== beat.narration) {
-      throw new Error(
-        `${label} narration must exactly match beat ${beat.beatId}.`,
-      );
-    }
-    if (scene.estimatedDurationSeconds !== beat.estimatedDurationSeconds) {
-      throw new Error(
-        `${label} duration must exactly match beat ${beat.beatId}.`,
-      );
-    }
-    const caption = scene.caption;
-    if (
-      !caption ||
-      caption.line1 !== beat.suggestedCaption?.line1 ||
-      (caption.line2 ?? undefined) !==
-        (beat.suggestedCaption?.line2 ?? undefined) ||
-      (caption.redEmphasis ?? undefined) !==
-        (beat.suggestedCaption?.redEmphasis ?? undefined)
-    ) {
-      throw new Error(
-        `${label} caption must exactly copy beat ${beat.beatId} suggestedCaption.`,
-      );
-    }
-    if (scene.isAhaCard !== Boolean(beat.isAhaCard)) {
-      throw new Error(`${label} isAhaCard must match beat ${beat.beatId}.`);
-    }
-    if (!scene.centralIdea || !scene.visualPurpose || !scene.primarySubject) {
-      throw new Error(
-        `${label} is missing centralIdea, visualPurpose, or primarySubject.`,
-      );
-    }
-    if (!STORYBOARD_COMPOSITION_TYPES.has(scene.compositionType)) {
-      throw new Error(`${label} has an unsupported compositionType.`);
-    }
-    if (
-      !Array.isArray(scene.supportingElements) ||
-      !Array.isArray(scene.characters)
-    ) {
-      throw new Error(
-        `${label} supportingElements and characters must be arrays.`,
-      );
-    }
-    if (
-      !scene.programmaticOverlays ||
-      !Array.isArray(scene.programmaticOverlays.diagramLabels)
-    ) {
-      throw new Error(
-        `${label} programmaticOverlays.diagramLabels must be an array.`,
-      );
-    }
-    if (
-      typeof scene.headerText !== "string" ||
-      scene.headerText !== script.title
-    ) {
-      throw new Error(
-        `${label} headerText must exactly match the video title.`,
-      );
-    }
-    if (typeof scene.transitionToNext !== "string") {
-      throw new Error(`${label} transitionToNext must be a string.`);
-    }
   }
 }
 
-/**
- * Facts belong to the script, not the model. A small local model often paraphrases the title or
- * one-idea, or drifts a narration string, and then the whole batch is rejected and regenerated
- * (each attempt costs minutes on CPU). Here the application writes every script-owned field from
- * the beats. Only creative fields remain model-owned, and the validator checks those.
- */
-function reconcileStoryboardBatch(
-  candidate: any,
-  batchScript: Script,
-): Storyboard {
-  if (
-    !candidate ||
-    typeof candidate !== "object" ||
-    !Array.isArray(candidate.scenes)
-  ) {
-    // Leave malformed shapes untouched so validateStoryboardOutput rejects them with a clear reason.
-    return candidate as Storyboard;
+export function qaRouter(state: typeof ProductionState.State) {
+  if (state.qaStatus === "approved") {
+    return "storyboardAgent";
   }
 
-  const scenes = candidate.scenes.map((scene: any, index: number) => {
-    const beat = batchScript.beats[index];
-    if (!scene || typeof scene !== "object" || !beat) return scene;
+  if (state.revisionCount < MAX_SCRIPT_REVISIONS) {
+    return "scriptwriterAgent";
+  }
 
-    return {
-      ...scene,
-      // Script-owned fields.
-      sceneId: beat.cardNumber,
-      sourceBeatIds: [beat.beatId],
-      narration: beat.narration,
-      estimatedDurationSeconds: beat.estimatedDurationSeconds,
-      isAhaCard: Boolean(beat.isAhaCard),
-      headerText: batchScript.title,
-      caption: {
-        line1: beat.suggestedCaption?.line1,
-        line2: beat.suggestedCaption?.line2 ?? undefined,
-        redEmphasis: beat.suggestedCaption?.redEmphasis ?? undefined,
-      },
-      // Optional or structural fields: default them so a model that omits them is not rejected.
-      visualMetaphor: scene.visualMetaphor ?? null,
-      analogyRelationShown: scene.analogyRelationShown ?? null,
-      echoesScene: scene.echoesScene ?? null,
-      supportingElements: asArray(scene.supportingElements),
-      characters: asArray(scene.characters),
-      programmaticOverlays: {
-        diagramLabels: asArray(scene.programmaticOverlays?.diagramLabels),
-      },
-      transitionToNext:
-        typeof scene.transitionToNext === "string"
-          ? scene.transitionToNext
-          : "",
-    };
+  throw new Error(
+    `Script QA failed after ${MAX_SCRIPT_REVISIONS} revisions. ` +
+      `Production stopped. QA feedback: ${state.qaFeedback}`,
+  );
+}
+
+export async function compositionNode(state: ProductionStateType) {
+  const result = await artDirectionAgent(`
+STORYBOARD:
+${state.storyboard}
+
+VISUAL STYLE:
+2D Hand-Drawn Stickman Webcomic Card on a full 9:16 canvas (1080x1920).
+
+Create exactly one canonical CompositionPlan per Scene.
+
+Requirements:
+- Preserve every sceneId (numeric: 1, 2, 3...) and scene order.
+- Use normalized coordinates from 0–100 across a 3-zone 9:16 card layout:
+  1. Top Title Zone: y = 0–14% (bold uppercase topic header)
+  2. Central Illustration Zone: y = 15–74% (stickman character, props, and environment)
+  3. Bottom Caption Zone: y = 75–100% (1–2 line key phrase)
+- Use only approved characters, props, and visual relationships.
+- Do not change the narrative or introduce new story elements.
+
+Return valid JSON only with a top-level "compositionPlan" array keyed by "sceneId".
+`);
+
+  return {
+    composition: result,
+  };
+}
+
+export async function continuityNode(state: ProductionStateType) {
+  const result = await continuityAgent(`
+DIRECTOR BRIEF:
+${state.directorOutput}
+
+STORYBOARD:
+${state.storyboard}
+
+COMPOSITION:
+${state.composition}
+
+Create the canonical production bible for a 2D hand-drawn stickman comic series.
+
+Enforce these exact visual standards:
+- Character Design: Simple white circular heads (#FFFFFF), small black dot eyes, expressive curved eyebrows and mouths, bold ink stick limbs (#1A1A1A, stroke-width 6–7), and simple flat-colored clothing or props when needed.
+- Linework: Bold ink outlines (#1A1A1A, stroke-width 5–7, stroke-linecap="round", stroke-linejoin="round") across characters, props, and backgrounds.
+- Exact Color Palette:
+  * Warm Cream/Parchment Card Background: #FDFBF7
+  * Earthy Browns (dirt, wood, huts, furniture): #DCCBB5, #9A7658
+  * Muted Greens (grass and trees): #A8B9A0, #6D8758
+  * Soft Daytime Sky / Cool Accents: #A8C2D1
+  * Muted Warm Accent: #D9B66F
+  * Emphasis Red (caption key phrase and meaningful focal accent): #E63946
+  * Primary Ink / Title Text: #1A1A1A
+- Typography Layout:
+  * Top Header: Bold rounded uppercase comic title centered at y=128 on the 1080x1920 card.
+  * Bottom Punchline: One or two bold uppercase lines centered at y=1585 and y=1680, with the canonical redEmphasis colored #E63946.
+
+Do not change approved storyboard or composition decisions.
+`);
+
+  return {
+    continuity: result,
+  };
+}
+
+export async function visualDirectorNode(state: ProductionStateType) {
+  const result = await visualDirectorAgent(`
+STORYBOARD:
+${state.storyboard}
+
+COMPOSITION:
+${state.composition}
+
+PRODUCTION BIBLE:
+${state.continuity}
+
+Create one detailed 2D stickman comic-card visual specification per scene.
+
+For each sceneId, explicitly specify:
+1. "topTitle": Exact uppercase title text for the top of the card (e.g., "${state.topic.toUpperCase()}").
+2. "sceneDescription": Detailed visual breakdown of the stickman's pose, facial expression, action, specific props, background environment (indoor room, outdoor landscape, chart, or split comparison), and any in-scene signs/labels (e.g., clock time, signpost, chart labels).
+3. "bottomLine1": First line of the bottom punchline (black text, or white on dark night scenes).
+4. "bottomLine2": Second line of the bottom punchline (highlight key emphasis words in crimson red #E63946).
+
+Preserve exact sceneId order, canonical characters, and exact palette hex codes.
+Return valid JSON only.
+`);
+
+  return {
+    visualPrompts: result,
+  };
+}
+
+export async function svgIllustratorNode(state: ProductionStateType) {
+  let scenes: any[] = [];
+  try {
+    const parsedStoryboard =
+      typeof state.storyboard === "string"
+        ? extractJsonObject(state.storyboard)
+        : state.storyboard;
+    scenes = Array.isArray(parsedStoryboard?.scenes)
+      ? parsedStoryboard.scenes
+      : [];
+  } catch (err) {
+    throw new Error(
+      `Failed to parse state.storyboard in svgIllustratorNode: ${err}`,
+    );
+  }
+  if (scenes.length === 0) {
+    throw new Error("SVG illustration requires the canonical storyboard scenes array.");
+  }
+  const storyboardIds = scenes.map((scene: any, index: number) => Number(scene.sceneId ?? index + 1));
+  if (storyboardIds.some((id: number) => !Number.isInteger(id) || id < 1) || new Set(storyboardIds).size !== storyboardIds.length) {
+    throw new Error("SVG illustration requires unique positive integer storyboard sceneIds.");
+  }
+
+  let visualPromptsData: any = state.visualPrompts;
+  try {
+    if (typeof state.visualPrompts === "string") {
+      visualPromptsData = extractJsonObject(state.visualPrompts);
+    }
+  } catch {}
+
+  const svgAssets: Array<{ sceneId: number; svgCode: string }> = [];
+
+  for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i];
+    const sceneId = Number(scene.sceneId ?? i + 1);
+    if (!Number.isInteger(sceneId) || sceneId < 1) {
+      throw new Error(`Storyboard scene at index ${i} has an invalid sceneId.`);
+    }
+
+    const sceneVisualSpec = Array.isArray(visualPromptsData?.scenes)
+      ? visualPromptsData.scenes.find(
+          (s: any) => Number(s.sceneId ?? s.scene) === sceneId,
+        )
+      : visualPromptsData;
+
+    const sceneInput = `
+${svgRequirements}
+
+==================================================
+SCENE INFORMATION
+==================================================
+
+Scene ID: ${sceneId}
+
+STORYBOARD SCENE:
+${JSON.stringify(scene, null, 2)}
+
+VISUAL SPECIFICATION:
+${
+  typeof sceneVisualSpec === "string"
+    ? sceneVisualSpec
+    : JSON.stringify(sceneVisualSpec, null, 2)
+}
+
+==================================================
+TASK
+==================================================
+
+Generate only the central artwork for Scene ${sceneId}. Keep the header and caption areas clear; exact title and caption text are composed programmatically after artwork validation.
+Return only valid SVG/XML starting with <svg and ending with </svg>.
+Do not include Markdown code fences, JSON wrappers, or explanations.
+`.trim();
+
+    let svgCode: string | undefined;
+    let lastError: unknown;
+    let correction = "";
+    // One correction pass handles common model violations without letting an
+    // invalid asset silently pass or creating an unbounded graph retry loop.
+    for (let attempt = 1; attempt <= 2 && !svgCode; attempt++) {
+      try {
+        const singleSceneResult = await svgIllustratorAgent(`${sceneInput}${correction}`);
+        const trimmed = singleSceneResult.trim();
+        let candidate: string;
+
+        if (trimmed.startsWith("{") || trimmed.startsWith("```json")) {
+          const parsedAsset = extractJsonObject(trimmed);
+          const resolvedSceneId = Number(parsedAsset.sceneId ?? sceneId);
+          if (resolvedSceneId !== sceneId) {
+            throw new Error(`Response sceneId ${resolvedSceneId} does not match requested scene ${sceneId}.`);
+          }
+          if (typeof parsedAsset.svgCode !== "string") {
+            throw new Error(`Missing svgCode in JSON response for scene ${sceneId}.`);
+          }
+          candidate = extractSvgResponse(parsedAsset.svgCode);
+        } else {
+          candidate = extractSvgResponse(trimmed);
+        }
+
+        // Gemini may include labels despite the prompt. Strip generated text;
+        // the renderer adds the canonical title and caption after validation.
+        svgCode = validateSvgArtwork(removeSvgTextElements(candidate), sceneId);
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          correction = `\n\nCORRECTION REQUIRED: Your previous SVG failed validation: ${String(error)}. Regenerate the complete scene SVG from scratch. Follow every SVG restriction exactly; return only one SVG root.`;
+        }
+      }
+    }
+    if (!svgCode) {
+      throw new Error(`Scene ${sceneId} failed SVG validation after one correction attempt: ${String(lastError)}`, { cause: lastError });
+    }
+
+    svgAssets.push({
+      sceneId,
+      svgCode,
+    });
+  }
+
+  return {
+    svgIllustrations: JSON.stringify({ svgAssets }, null, 2),
+  };
+}
+
+export async function comprehensionNode(state: ProductionStateType) {
+  const result = await comprehensionAgent(state.topic);
+  return {
+    comprehension: result,
+  };
+}
+
+export async function researchNode(state: ProductionStateType) {
+  const result = await researchAgent(`
+TOPIC:
+${state.topic}
+
+COMPREHENSION:
+${state.comprehension}
+
+Research the topic and create a detailed evidence-based research dossier.
+`);
+
+  return {
+    researchDossier: result,
+  };
+}
+
+export async function factCheckNode(state: ProductionStateType) {
+  const result = await factCheckAgent(`
+TOPIC:
+${state.topic}
+
+RESEARCH DOSSIER:
+${state.researchDossier}
+
+TASK:
+
+Perform an independent factuality audit of the research dossier.
+
+Follow the Independent Fact-Checking Skill strictly.
+
+Requirements:
+
+1. Return valid JSON only.
+2. Follow the complete FactCheckResult output contract.
+3. Audit individual claims, causal relationships, analogies,
+   and domain-specific safety concerns.
+4. Identify all blocking, major, and minor issues.
+5. Do not invent sources or evidence.
+6. Do not mark claims verified without traceable supporting evidence.
+7. Distinguish unsupported claims from false claims.
+8. Set status to "revise" whenever blocking issues remain.
+9. Set status to "pass" only when no blocking issues remain.
+10. Explicitly report verification limitations.
+
+Do not return Markdown or explanatory text outside JSON.
+`);
+
+  const validatedResult = parseFactCheckResult(result);
+
+  const approved =
+    validatedResult.status === "pass" &&
+    validatedResult.blockingIssues.length === 0;
+
+  return {
+    factCheck: validatedResult,
+    factCheckStatus: approved
+      ? ("approved" as const)
+      : ("revision_required" as const),
+  };
+}
+
+export function factCheckRouter(state: ProductionStateType) {
+  if (
+    state.factCheckStatus === "approved" &&
+    state.factCheck?.status === "pass" &&
+    state.factCheck.blockingIssues.length === 0
+  ) {
+    return "strategy";
+  }
+
+  throw new Error(
+    `Fact-check failed. Status: ${state.factCheckStatus}. Blocking issues: ${
+      state.factCheck?.blockingIssues.join(", ") ??
+      "No fact-check result available"
+    }`,
+  );
+}
+
+export async function strategyNode(state: ProductionStateType) {
+  const result = await strategyAgent(`
+TOPIC:
+${state.topic}
+
+COMPREHENSION:
+${state.comprehension}
+
+RESEARCH:
+${state.researchDossier}
+
+FACT CHECK:
+${JSON.stringify(state.factCheck, null, 2)}
+
+Design a storytelling strategy for a 2D hand-drawn stickman comic explainer video.
+Focus on relatable everyday situations, clear visual contrasts, simple charts, and punchy 2-line comic captions.
+`);
+
+  return {
+    explanationStrategy: result,
+  };
+}
+
+export async function directorNode(state: ProductionStateType) {
+  const factCheckText = JSON.stringify(state.factCheck ?? {}, null, 2);
+
+  const result = await directorAgent({
+    topic: state.topic,
+    referenceScript: state.referenceScript,
+    researchDossier: {
+      research: state.researchDossier,
+      factCheck: factCheckText,
+    },
+    factCheckReport: factCheckText,
+    explanationStrategy: state.explanationStrategy,
   });
 
   return {
-    ...candidate,
-    videoTitle: batchScript.title,
-    oneIdea: batchScript.oneIdea,
-    aspectRatio: "9:16",
-    upstreamIssues: Array.isArray(candidate.upstreamIssues)
-      ? candidate.upstreamIssues
-      : [],
-    scenes,
-  } as Storyboard;
-}
-
-export async function storyboardNode(state: typeof FilmState.State) {
-  const fullBrief = asObject<Record<string, any>>(state.creativeBrief);
-  const normalizedScript = asObject<Script>(state.script);
-
-  if (
-    !normalizedScript ||
-    !Array.isArray(normalizedScript.beats) ||
-    normalizedScript.beats.length === 0
-  ) {
-    throw new Error(
-      "Storyboard requires a normalized script with at least one beat.",
-    );
-  }
-
-  if (!normalizedScript.title || !normalizedScript.oneIdea) {
-    throw new Error(
-      "Storyboard requires script.title and script.oneIdea before generation.",
-    );
-  }
-
-  // Keep the director-owned visual guidance, but do not send research and reviewer
-  // reports that have already been processed by their own pipeline stages.
-  const compactBrief = {
-    videoTitle: fullBrief.videoTitle ?? normalizedScript.title,
-    oneIdea: fullBrief.oneIdea ?? normalizedScript.oneIdea,
-    domainClassification: fullBrief.domainClassification,
-    mechanism: fullBrief.mechanism,
-    conceptsToCover: fullBrief.conceptsToCover,
-    analogyMap: Array.isArray(fullBrief.analogyMap) ? fullBrief.analogyMap : [],
-    whereAnalogyBreaks: fullBrief.whereAnalogyBreaks,
-    protagonist: fullBrief.protagonist,
-    visualStrategy: fullBrief.visualStrategy,
-    beatMap: Array.isArray(fullBrief.beatMap) ? fullBrief.beatMap : [],
+    directorOutput: result,
   };
+}
 
-  const batchSize = getAdaptiveBatchSize(normalizedScript.beats.length);
+export async function scriptwriterNode(state: ProductionStateType) {
+  const isRevision = state.qaStatus === "revision_required";
 
-  const batches: Script["beats"][] = [];
-  for (
-    let index = 0;
-    index < normalizedScript.beats.length;
-    index += batchSize
-  ) {
-    batches.push(normalizedScript.beats.slice(index, index + batchSize));
-  }
+  const result = await scriptwriterAgent(`
+TOPIC:
+${state.topic}
 
-  const completed: Storyboard[] = [];
-  let previousBatchContext:
-    | {
-        lastSceneId: number;
-        primarySubject: string;
-        characters: unknown[];
-        supportingElements: string[];
-        visualStyle: string;
-      }
-    | undefined;
+REFERENCE NARRATION:
+${state.referenceScript}
 
-  for (let index = 0; index < batches.length; index++) {
-    const batchBeats = batches[index]!;
-    const batchBeatIds = new Set(batchBeats.map((beat) => beat.beatId));
-    const batchCardNumbers = new Set(batchBeats.map((beat) => beat.cardNumber));
+STORY ARCHITECTURE:
+${state.directorOutput}
 
-    const matchingBeatMap = compactBrief.beatMap.filter((entry: any) => {
-      if (!entry || typeof entry !== "object") return true;
+RESEARCH:
+${state.researchDossier}
 
-      const id = entry.beatId ?? entry.id;
-      if (typeof id === "string") return batchBeatIds.has(id);
+FACT CHECK:
+${JSON.stringify(state.factCheck, null, 2)}
 
-      const cardNumber = entry.cardNumber ?? entry.sceneId;
-      if (Number.isInteger(cardNumber)) {
-        return batchCardNumbers.has(cardNumber);
-      }
+EXPLANATION STRATEGY:
+${state.explanationStrategy}
 
-      return true;
-    });
+PREVIOUS SCRIPT:
+${isRevision ? state.script : "No previous script."}
 
-    // A batch's narration and duration must describe only its own beats. Retaining the
-    // full-script values here would waste context and confuse models about batch scope.
-    const batchWordCount = batchBeats.reduce(
-      (total, beat) =>
-        total +
-        (typeof beat.wordCount === "number"
-          ? beat.wordCount
-          : (beat.narration.match(/[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*/g) ?? [])
-              .length),
-      0,
-    );
-    const batchDuration = Number(
-      batchBeats
-        .reduce(
-          (total, beat) => total + Number(beat.estimatedDurationSeconds || 0),
-          0,
-        )
-        .toFixed(2),
-    );
+QA REVISION FEEDBACK:
+${isRevision ? state.qaFeedback : "No revision feedback."}
 
-    const batchScript: Script = {
-      ...normalizedScript,
-      beats: batchBeats,
-      narration: batchBeats.map((beat) => beat.narration).join(" "),
-      totalWordCount: batchWordCount,
-      estimatedDurationSeconds: batchDuration,
-      durationSumCheck: batchDuration,
-    };
+SCENE AND NARRATION REQUIREMENTS:
+- Keep the top-level canonical "beats" array.
+- Produce exactly one script beat for each Director beatMap entry.
+- Do not split, merge, or reorder Director beats.
+- Target 50–52 seconds total across 14–16 beats; each beat must be 3–4 seconds.
+- Keep narration concise, natural, accurate, and understandable when heard independently.
+- Keep the Script artifact canonical: narration, timing, suggested caption, and beat-to-claim references only. Do not add scene IDs, imageDetails, visual prompts, or SVG instructions to script beats.
+- Preserve all canonical beat fields, identifiers, Director stage/connector values, isAhaCard values, and claimIds.
 
-    const batchBrief = {
-      ...compactBrief,
-      beatMap: matchingBeatMap,
-    };
+REFERENCE FIDELITY REQUIREMENTS:
+- Preserve the reference's central idea and essential explanatory progression.
+- Do not replace its story with a different story or introduce unrelated concepts from research.
+- Adapt and tighten the narration to the requested 50–52 second runtime; do not preserve the reference clip's length by default.
+- Improve clarity and spoken flow without changing the intended message.
+- If a change is necessary for factual accuracy, identify it explicitly.
 
-    const input = JSON.stringify({
-      batch: {
-        index: index + 1,
-        total: batches.length,
-        firstSceneId: batchBeats[0]!.cardNumber,
-        lastSceneId: batchBeats[batchBeats.length - 1]!.cardNumber,
-        instruction:
-          "Create scenes only for the beats in this batch. Do not invent scenes for other beats.",
-      },
-      creativeBrief: batchBrief,
-      script: batchScript,
-      previousBatchContext,
-    });
+Return valid JSON only, following the Scriptwriter output contract and skill.
+`);
 
-    logEvent("storyboard.batch.start", {
-      batch: index + 1,
-      total: batches.length,
-      scenes: batchBeats.length,
-      firstSceneId: batchBeats[0]!.cardNumber,
-      lastSceneId: batchBeats[batchBeats.length - 1]!.cardNumber,
-      inputChars: input.length,
-    });
-
-    const { data } = await callJson<Storyboard>(
-      `storyboard-batch-${index + 1}`,
-      storyboardAgent,
-      withFeedback(input, state, "storyboard"),
-      1,
-      (candidate) => validateStoryboardOutput(candidate, batchScript),
-      (candidate) => reconcileStoryboardBatch(candidate, batchScript),
-    );
-
-    completed.push(data);
-
-    const lastScene = data.scenes[data.scenes.length - 1]!;
-    previousBatchContext = {
-      lastSceneId: lastScene.sceneId,
-      primarySubject: lastScene.primarySubject,
-      characters: lastScene.characters,
-      supportingElements: lastScene.supportingElements,
-      visualStyle: data.videoStyle,
-    };
-
-    logEvent("storyboard.batch.success", {
-      batch: index + 1,
-      total: batches.length,
-      scenes: data.scenes.length,
-      outputChars: JSON.stringify(data).length,
-    });
-  }
-
-  if (completed.length !== batches.length || completed.length === 0) {
-    throw new Error(
-      `Storyboard generation incomplete: received ${completed.length} of ${batches.length} batches.`,
-    );
-  }
-
-  const first = completed[0]!;
-  const merged: Storyboard = {
-    ...first,
-    videoTitle: normalizedScript.title,
-    oneIdea: normalizedScript.oneIdea,
-    aspectRatio: "9:16",
-    scenes: completed.flatMap((batch) => batch.scenes),
-    upstreamIssues: completed
-      .flatMap((batch) => batch.upstreamIssues ?? [])
-      .filter(
-        (issue, index, all) =>
-          all.findIndex(
-            (candidate) => JSON.stringify(candidate) === JSON.stringify(issue),
-          ) === index,
-      ),
+  return {
+    script: result,
+    revisionCount: isRevision ? state.revisionCount + 1 : state.revisionCount,
+    qaStatus: "pending" as const,
   };
-
-  // Detect duplicate/missing IDs and ordering mistakes before writing to graph state.
-  validateStoryboardOutput(merged, normalizedScript);
-
-  const sceneIds = merged.scenes.map((scene) => scene.sceneId);
-  if (new Set(sceneIds).size !== sceneIds.length) {
-    throw new Error("Merged storyboard contains duplicate scene IDs.");
-  }
-
-  const raw = JSON.stringify(merged);
-  logEvent("storyboard.complete", {
-    batches: batches.length,
-    scenes: merged.scenes.length,
-    chars: raw.length,
-  });
-
-  return { storyboard: raw, scenes: merged.scenes };
 }
 
-/**
- * Art direction is not part of the QA package, so it runs once, AFTER QA passes (see workflow.graph.ts),
- * instead of on every revision pass. A failure here must not discard an otherwise approved package.
- */
-export async function visualStyleNode(state: typeof FilmState.State) {
-  try {
-    const { data } = await callJson(
-      "artDirection",
-      artDirectionAgent,
-      JSON.stringify({
-        scenes: state.scenes,
-        visualPrompts: state.visualPrompts,
-        svgAssets: state.svgAssets,
-        visualStyle: state.visualStyle,
-        productionBible: state.productionBible,
-      }),
-    );
-    return { visualCompositions: data };
-  } catch (error) {
-    logEvent("artDirection.failed", { reason: shortReason(error) });
-    return { visualCompositions: null };
-  }
-}
+export async function qaNode(state: ProductionStateType) {
+  const result: string = await qaAgent(`
+TOPIC:
+${state.topic}
 
-export async function compositionNode(state: typeof FilmState.State) {
-  if (!state.scenes || state.scenes.length === 0) {
-    throw new Error("Composition Planner requires structured scenes.");
-  }
+ORIGINAL RESEARCH:
+${state.researchDossier}
 
-  const input = JSON.stringify({
-    scenes: state.scenes,
-    visualStyle: state.visualStyle,
-  });
+FACT CHECK:
+${JSON.stringify(state.factCheck, null, 2)}
 
-  const { raw, data: parsed } = await callJson<
-    { compositionPlan?: any[] } | any[]
-  >(
-    "composition",
-    compositionPlannerAgent,
-    withFeedback(input, state, "composition"),
-  );
-  const plan = Array.isArray(parsed)
-    ? parsed
-    : Array.isArray((parsed as any)?.compositionPlan)
-      ? (parsed as any).compositionPlan
-      : [];
+SCRIPT:
+${state.script}
 
-  if (plan.length === 0) {
-    throw new Error(
-      `Composition Planner returned an empty compositionPlan:\n${raw}`,
-    );
-  }
+Evaluate:
 
-  return { compositionPlan: plan };
-}
+1. Factual accuracy.
+2. Opening hook.
+3. Storytelling quality.
+4. Emotional engagement.
+5. Logical progression.
+6. Simplicity and comprehension.
+7. Pacing and narration.
+8. Strength of conclusion.
 
-/**
- * Runs in parallel with compositionNode after storyboardNode.
- * Uses storyboard and visualStyle directly rather than compositionPlan so there is no data dependency.
- */
-export async function continuityNode(state: typeof FilmState.State) {
-  const input = JSON.stringify({
-    storyboard: state.storyboard,
-    visualStyle: state.visualStyle,
-  });
-  const { data } = await callJson(
-    "continuity",
-    continuityAgent,
-    withFeedback(input, state, "continuity"),
-  );
-  return { productionBible: data };
-}
+Return a clear decision:
+APPROVED or REVISION_REQUIRED.
 
-export async function visualNode(state: typeof FilmState.State) {
-  if (!state.compositionPlan || state.compositionPlan.length === 0) {
-    throw new Error("Visual Director requires a populated compositionPlan.");
-  }
+If revision is required, explain the exact corrections.
+`);
 
-  const input = JSON.stringify({
-    storyboard: state.storyboard,
-    compositionPlan: state.compositionPlan,
-    productionBible: state.productionBible,
-  });
+  const approved =
+    /\bAPPROVED\b/i.test(result) && !/\bREVISION_REQUIRED\b/i.test(result);
 
-  const { data: parsed } = await callJson<{ imagePrompts?: any[] } | any[]>(
-    "visualDirector",
-    visualDirectorAgent,
-    withFeedback(input, state, "visualPrompts"),
-  );
-  const prompts = Array.isArray(parsed)
-    ? parsed
-    : Array.isArray((parsed as any)?.imagePrompts)
-      ? (parsed as any).imagePrompts
-      : [];
-
-  // Overlay text is locked to the storyboard so the model can never rewrite captions.
-  const lockedPrompts = prompts.map((item: any) => {
-    const matchingScene = state.scenes.find((s) => s.sceneId === item.sceneId);
-    if (!matchingScene) return item;
-
-    return {
-      ...item,
-      textOverlays: {
-        header: matchingScene.headerText ?? item.textOverlays?.header ?? null,
-        captionLine1:
-          matchingScene.caption?.line1 ??
-          item.textOverlays?.captionLine1 ??
-          null,
-        captionLine2:
-          matchingScene.caption?.line2 ??
-          item.textOverlays?.captionLine2 ??
-          null,
-        redEmphasis:
-          matchingScene.caption?.redEmphasis ??
-          item.textOverlays?.redEmphasis ??
-          null,
-        diagramLabels:
-          matchingScene.programmaticOverlays?.diagramLabels ??
-          item.textOverlays?.diagramLabels ??
-          [],
-      },
-    };
-  });
-
-  return { visualPrompts: lockedPrompts };
-}
-
-
-export async function svgIllustrationNode(state: typeof FilmState.State) {
-  if (!state.scenes.length || !state.visualPrompts.length || !state.compositionPlan.length || !state.productionBible) {
-    return {
-      svgAssets: [],
-      svgIssues: ["SVG Illustrator is missing scenes, visual prompts, composition plans, or productionBible."],
-    };
-  }
-
-  const input = JSON.stringify({
-    scenes: state.scenes,
-    visualPrompts: state.visualPrompts,
-    compositionPlan: state.compositionPlan,
-    productionBible: state.productionBible,
-  });
-
-  try {
-    const { data } = await callJson<{ svgAssets?: any[] }>(
-      "svgIllustrator",
-      svgIllustratorAgent,
-      withFeedback(input, state, "svgIllustrations"),
-      1,
-      (candidate) => {
-        if (!candidate || !Array.isArray(candidate.svgAssets)) {
-          throw new Error("SVG Illustrator must return { svgAssets: [...] }.");
-        }
-        const ids = candidate.svgAssets.map((asset: any) => asset?.sceneId);
-        const expected = state.scenes.map((scene) => scene.sceneId);
-        if (JSON.stringify(ids) !== JSON.stringify(expected)) {
-          throw new Error("SVG assets must cover every scene exactly once and in scene order.");
-        }
-        candidate.svgAssets.forEach((asset: any) => validateSvgArtwork(asset?.svg, asset?.sceneId));
-      },
-    );
-
-    return {
-      svgAssets: data.svgAssets!.map((asset: any) => ({
-        sceneId: asset.sceneId,
-        svg: validateSvgArtwork(asset.svg, asset.sceneId),
-      })),
-      svgIssues: [],
-    };
-  } catch (error) {
-    const issue = `SVG illustration generation/validation failed: ${shortReason(error)}`;
-    logEvent("svgIllustrator.failed", { reason: shortReason(error) });
-    return { svgAssets: [], svgIssues: [issue] };
-  }
-}
-
-const asText = (item: unknown): string =>
-  typeof item === "string" ? item : JSON.stringify(item);
-
-export async function qaNode(state: typeof FilmState.State) {
-  // ---- Layer 1: deterministic validation in code. The model cannot override this. ----
-  const pkg = {
-    researchDossier: state.researchDossier,
-    explanationStrategy: state.explanationStrategy,
-    factCheckReport: state.factCheckReport,
-    comprehensionReport: state.comprehensionReport,
-    creativeBrief: asObject(state.creativeBrief),
-    script: asObject(state.script),
-    storyboard: asObject(state.storyboard),
-    scenes: state.scenes,
-    compositionPlan: state.compositionPlan,
-    visualPrompts: state.visualPrompts,
-    svgAssets: state.svgAssets,
-    svgIssues: state.svgIssues,
-    productionBible: asObject(state.productionBible),
+  return {
+    qaFeedback: result,
+    qaStatus: approved ? ("approved" as const) : ("revision_required" as const),
   };
+}
 
-  const validatorReport = validatePackage(pkg);
-  for (const issue of state.svgIssues ?? []) {
-    validatorReport.blockingIssues.push({
-      gate: "svg-illustration",
-      sceneId: null,
-      problem: issue,
-    });
-  }
-  if (!state.svgAssets || state.svgAssets.length !== state.scenes.length) {
-    validatorReport.blockingIssues.push({
-      gate: "svg-illustration",
-      sceneId: null,
-      problem: "SVG asset coverage does not match the approved scene count.",
-    });
-  }
+export async function artDirectionNode(state: ProductionStateType) {
+  const result = await artDirectionAgent(`
+SCRIPT:
+${state.script}
 
-  // ---- Layer 2: LLM judgment (facts, analogy fidelity, depiction, story craft). ----
-  let qa: any = null;
+STORYBOARD:
+${state.storyboard}
+`);
+
+  return {
+    artDirection: result,
+  };
+}
+
+export async function finalQaNode(state: ProductionStateType) {
+  const result = await finalQAagent(`
+TOPIC:
+${state.topic}
+
+DIRECTOR BRIEF:
+${state.directorOutput}
+
+SCRIPT:
+${state.script}
+
+STORYBOARD:
+${state.storyboard}
+
+COMPOSITION:
+${state.composition}
+
+PRODUCTION BIBLE:
+${state.continuity}
+
+VISUAL PROMPTS:
+${state.visualPrompts}
+
+SVG ILLUSTRATIONS:
+${state.svgIllustrations}
+
+Perform final production QA for a 2D stickman comic explainer series.
+
+Check:
+1. Factual accuracy and claim traceability.
+2. Storytelling and comprehension.
+3. Beat-to-scene coverage (every beat has a matching sceneId SVG).
+4. Narration preservation.
+5. Storyboard title and bottom key phrase are present for every scene and remain in their canonical overlay fields.
+6. Character and prop continuity (stickman style, bold dark outlines, consistent colors).
+7. SVG artwork validity (valid XML, viewBox="0 0 1080 1130", no embedded text, rich scene details rather than bare placeholders). The export renderer places artwork in the central band and adds the exact title/caption as SVG text.
+8. Approve only when every required check passes. Otherwise require revision and report concrete, minimal corrections.
+
+Return exactly the final QA skill JSON contract: {"status":"approved"|"revision_required","issues":[...]}. Each issue must include sceneId when applicable, artifact, severity, category, description, and correction. Do not add markdown or text outside the JSON.
+`);
+
+  let review: any;
   try {
-    ({ data: qa } = await callJson(
-      "qa",
-      qaAgent,
-      JSON.stringify({ package: pkg, validatorReport }),
-    ));
-  } catch (error) {
-    // Independent creative review is a release gate; deterministic validation
-    // cannot substitute for factual, analogy, and depiction judgment.
-    logEvent("qa.judgment_failed", { reason: shortReason(error) });
+    review = extractJsonObject(result);
+  } catch {
+    throw new Error(`Final QA must return the required JSON status/issues object. Response began: ${result.slice(0, 240)}`);
   }
-
-  const llmStatus = qa?.status ?? qa?.qualityStatus;
-  if (!qa || !["pass", "revise", "fail"].includes(String(llmStatus))) {
-    qa = {
-      ...(qa ?? {}),
-      status: "revise",
-      blockingIssues: [{
-        category: "qa-review",
-        sceneId: null,
-        problem: "Independent QA review is missing, failed, or returned an invalid status.",
-        requiredFix: "Restore a valid independent QA response before release.",
-      }],
-      summary: "Release blocked because independent creative QA did not complete.",
-    };
-  }
-  const llmIssues: any[] = Array.isArray(qa?.blockingIssues)
-    ? qa.blockingIssues
-    : [];
-  const llmBlocking = llmIssues.map((i) => ({
-    gate: i.category ?? "judgment",
-    sceneId: i.sceneId ?? null,
-    problem: String(i.problem ?? ""),
-    requiredFix: i.requiredFix,
-  }));
-
-  // ---- Release gates built from the independent reviewers. ----
-  const reviewGates: any[] = [];
-  const publicationCaveats: string[] = [];
-  const factReport: any = state.factCheckReport;
-  const comprehension: any = state.comprehensionReport;
-
-  // 1. Missing fact-check reports block publication.
-  if (!factReport || Object.keys(factReport).length === 0) {
-    reviewGates.push({
-      gate: "epistemic",
-      sceneId: null,
-      problem: "Missing fact-check report.",
-      requiredFix:
-        "Run the fact-check agent to generate a fact-check report before publication.",
-    });
-  } else {
-    if (factReport.status === "incomplete" || factReport.status === "error") {
-      reviewGates.push({
-        gate: "epistemic",
-        sceneId: null,
-        problem: `Fact-check reviewer returned an incomplete response (status: ${factReport.status}).`,
-        requiredFix:
-          "Ensure the fact-check agent completes its review successfully.",
-      });
-    }
-
-    const criticalErrors = asArray(factReport.criticalErrors);
-    for (const item of criticalErrors) {
-      reviewGates.push({
-        gate: "epistemic",
-        sceneId:
-          (typeof item === "object" && item !== null
-            ? (item as any).sceneId
-            : null) ?? null,
-        problem: asText(
-          typeof item === "object" && item !== null
-            ? ((item as any).problem ?? (item as any).error ?? item)
-            : item,
-        ),
-        requiredFix:
-          "Correct critical factual errors using the research dossier.",
-      });
-    }
-
-    const materialIssues = asArray(factReport.materialIssues);
-    for (const item of materialIssues) {
-      const isResolved =
-        typeof item === "object" &&
-        item !== null &&
-        ((item as any).resolved === true ||
-          (item as any).status === "resolved");
-      if (!isResolved) {
-        reviewGates.push({
-          gate: "epistemic",
-          sceneId:
-            (typeof item === "object" && item !== null
-              ? (item as any).sceneId
-              : null) ?? null,
-          problem: asText(
-            typeof item === "object" && item !== null
-              ? ((item as any).problem ?? (item as any).issue ?? item)
-              : item,
-          ),
-          requiredFix:
-            "Resolve the material factual issue or mark it explicitly as resolved.",
-        });
-      }
-    }
-
-    if (
-      factReport.status === "revise" &&
-      criticalErrors.length === 0 &&
-      materialIssues.filter(
-        (item) =>
-          !(
-            typeof item === "object" &&
-            item !== null &&
-            ((item as any).resolved === true ||
-              (item as any).status === "resolved")
-          ),
-      ).length === 0
-    ) {
-      reviewGates.push({
-        gate: "epistemic",
-        sceneId: null,
-        problem:
-          factReport.summary ?? "Independent fact review requested revision.",
-      });
-    }
-
-    for (const item of asArray(factReport.sourceVerificationRequired)) {
-      if (STRICT_SOURCE_VERIFICATION) {
-        reviewGates.push({
-          gate: "epistemic",
-          sceneId: null,
-          problem: `Source verification required: ${asText(item)}`,
-          requiredFix:
-            "Provide and verify a reliable source before publication.",
-        });
-      } else {
-        publicationCaveats.push(asText(item));
-      }
-    }
-  }
-
-  // 2. Missing or low-scoring comprehension reports block publication.
-  if (!comprehension || Object.keys(comprehension).length === 0) {
-    reviewGates.push({
-      gate: "storyCraft",
-      sceneId: null,
-      problem: "Missing comprehension report.",
-      requiredFix:
-        "Run the comprehension agent to evaluate script clarity before publication.",
-    });
-  } else {
-    if (
-      comprehension.status === "incomplete" ||
-      comprehension.status === "error"
-    ) {
-      reviewGates.push({
-        gate: "storyCraft",
-        sceneId: null,
-        problem: `Comprehension reviewer returned an incomplete response (status: ${comprehension.status}).`,
-        requiredFix:
-          "Ensure the comprehension agent completes its review successfully.",
-      });
-    }
-
-    const compScore = Number(
-      comprehension.overallScore ?? comprehension.comprehensionScore ?? NaN,
-    );
-    if (!Number.isNaN(compScore) && compScore < COMPREHENSION_MIN) {
-      reviewGates.push({
-        gate: "storyCraft",
-        sceneId: null,
-        problem: `Comprehension score ${compScore} is below minimum threshold ${COMPREHENSION_MIN}.`,
-        requiredFix:
-          "Clarify confusing transitions, jargon, or pacing in the script.",
-      });
-    }
-
-    for (const item of asArray(comprehension.confusionPoints)) {
-      reviewGates.push({
-        gate: "storyCraft",
-        sceneId:
-          (typeof item === "object" && item !== null
-            ? (item as any).sceneId
-            : null) ?? null,
-        problem: asText(
-          typeof item === "object" && item !== null
-            ? ((item as any).problem ?? (item as any).issue ?? item)
-            : item,
-        ),
-        requiredFix: "Resolve the viewer confusion point in the script.",
-      });
-    }
-  }
-
-  // 3. Deterministic package validator issues & LLM creative quality threshold.
-  const validatorIssues = asArray(validatorReport?.blockingIssues);
-  const scoreKeys = [
+  const dimensions = [
     "hookAndCuriosity",
     "narrativeStructure",
     "centralIdeaClarity",
@@ -1270,87 +627,133 @@ export async function qaNode(state: typeof FilmState.State) {
     "factualAccuracy",
     "endingAndMemorability",
   ];
-  const rawScores = qa?.creativeScores ?? qa?.dimensions;
-  const dimensionValues = scoreKeys.map((key) => Number(rawScores?.[key]));
-  const hasCompleteScores =
-    dimensionValues.length === scoreKeys.length &&
-    dimensionValues.every((score) => Number.isFinite(score) && score >= 1 && score <= 10);
-  const averageQuality = hasCompleteScores
-    ? dimensionValues.reduce((sum, score) => sum + score, 0) / dimensionValues.length
-    : null;
+  const issues = Array.isArray(review.issues)
+    ? review.issues
+    : Array.isArray(review.blockingIssues)
+      ? review.blockingIssues
+      : null;
+  if (!issues) {
+    throw new Error("Final QA response is missing its required issues array.");
+  }
+  const status = String(review.status ?? review.decision ?? "").toLowerCase();
 
-  if (averageQuality !== null && averageQuality < QUALITY_MIN) {
-    reviewGates.push({
-      gate: "storyCraft",
-      sceneId: null,
-      problem: `Average creative quality score (${averageQuality.toFixed(2)}/10) is below ${QUALITY_MIN}/10.`,
-      requiredFix:
-        "Strengthen narrative clarity, visual metaphor, and scene pacing.",
+  // Keep optional numeric scorecards when present, but do not reject the
+  // canonical finalQA skill response, which is intentionally status/issues.
+  const scoresObject = review.creativeScores;
+  const scoresPresent = scoresObject && typeof scoresObject === "object";
+  let normalizedScores: Record<string, unknown> | undefined;
+  if (scoresPresent) {
+    const rawScores = dimensions.map((key) => {
+      const value = scoresObject[key];
+      return typeof value === "object" && value !== null ? Number((value as any).score) : Number(value);
     });
+    if (rawScores.every((score) => Number.isFinite(score) && score >= 1 && score <= 10)) {
+      const average = rawScores.reduce((sum, score) => sum + score, 0) / rawScores.length;
+      normalizedScores = {
+        ...scoresObject,
+        average: Math.floor(average * 10) / 10,
+      };
+    }
   }
-
-  const allBlocking = [...validatorIssues, ...reviewGates, ...llmBlocking];
-  const passed = allBlocking.length === 0 && llmStatus === "pass";
-
-  const candidateStages: Stage[] = allBlocking
-    .map((issue) => stageForIssue(issue))
-    .filter((s): s is Stage => Boolean(s));
-
-  const explicitTarget = isStage(qa?.reviseTarget) ? qa.reviseTarget : null;
-  if (explicitTarget) {
-    candidateStages.push(explicitTarget);
-  }
-
-  const reviseTarget = passed
-    ? null
-    : (earliestStage(candidateStages) ?? "script");
-
-  const feedback = passed ? null : buildFeedback(allBlocking, qa);
-
-  logEvent("qa.complete", {
-    passed,
-    blockingCount: allBlocking.length,
-    averageQuality,
-    reviseTarget,
-    revisionCount: (state.revisionCount ?? 0) + (passed ? 0 : 1),
-  });
+  const scoreGatePassed = !normalizedScores || Number(normalizedScores.average) >= 9;
+  const approved =
+    (status === "approved" || status === "pass") &&
+    issues.length === 0 &&
+    scoreGatePassed;
 
   return {
-    qualityStatus: passed ? "pass" : "revise",
-    qualityReport: {
-      ...(qa ?? {}),
-      status: passed ? "pass" : "revise",
-      reviseTarget,
-      timingAudit: qa?.timingAudit ?? {},
-      blockingIssues: allBlocking,
-      reviewItems: reviewGates,
-      factReview: qa?.factReview ?? [],
-      analogyReview: qa?.analogyReview ?? [],
-      depictionReview: qa?.depictionReview ?? [],
-      creativeScores: {
-        hookAndCuriosity: qa?.creativeScores?.hookAndCuriosity ?? null,
-        narrativeStructure: qa?.creativeScores?.narrativeStructure ?? null,
-        centralIdeaClarity: qa?.creativeScores?.centralIdeaClarity ?? null,
-        causeAndEffectProgression: qa?.creativeScores?.causeAndEffectProgression ?? null,
-        emotionalEngagement: qa?.creativeScores?.emotionalEngagement ?? null,
-        analogyQualityAndFidelity: qa?.creativeScores?.analogyQualityAndFidelity ?? null,
-        visualStorytelling: qa?.creativeScores?.visualStorytelling ?? null,
-        ahaMomentAndPayoff: qa?.creativeScores?.ahaMomentAndPayoff ?? null,
-        factualAccuracy: qa?.creativeScores?.factualAccuracy ?? null,
-        endingAndMemorability: qa?.creativeScores?.endingAndMemorability ?? null,
-        average: averageQuality,
-        rationales: qa?.creativeScores?.rationales ?? {},
+    finalQaFeedback: JSON.stringify(
+      {
+        ...review,
+        status: approved ? "approved" : "revision_required",
+        issues,
+        ...(normalizedScores ? { creativeScores: normalizedScores } : {}),
       },
-      validatorReport,
-      publicationCaveats,
-      averageQuality,
-      summary: qa?.report ?? qa?.summary ?? null,
-    },
-    validatorReport,
-    reviseTarget,
-    qaFeedback: feedback ?? "",
-    revisionCount: passed
-      ? (state.revisionCount ?? 0)
-      : (state.revisionCount ?? 0) + 1,
+      null,
+      2,
+    ),
+    finalQaStatus: approved
+      ? ("approved" as const)
+      : ("revision_required" as const),
   };
 }
+
+export async function finalOutputNode(state: ProductionStateType) {
+  if (state.finalQaStatus !== "approved") {
+    throw new Error(
+      "Cannot generate final output: production has not passed final QA.",
+    );
+  }
+
+  return {
+    finalOutput: JSON.stringify(
+      {
+        topic: state.topic,
+        referenceScript: state.referenceScript,
+        script: state.script,
+        storyboard: state.storyboard,
+        composition: state.composition,
+        continuity: state.continuity,
+        visualPrompts: state.visualPrompts,
+        svgIllustrations: state.svgIllustrations,
+        qualityAssurance: {
+          script: state.qaFeedback,
+          finalProductionStatus: state.finalQaStatus,
+          finalProduction: state.finalQaFeedback,
+        },
+      },
+      null,
+      2,
+    ),
+  };
+}
+
+const svgRequirements = `
+VISUAL STYLE:
+Create a hand-drawn 2D cartoon explainer illustration.
+
+REFERENCE STYLE:
+- Warm storybook appearance.
+- Organic cartoon shapes.
+- Thick black outlines.
+- Muted earthy colors.
+- Detailed illustrated environments.
+- Expressive stickman characters.
+- Natural interaction between characters and props.
+
+CHARACTER RULES:
+- Head radius: exactly 58px.
+- Head fill: #FFFFFF.
+- Head stroke: #1A1A1A.
+- Head stroke width: 6px.
+- Character body and limb strokes: 6px.
+- Eyebrow strokes: 4px.
+- Prop strokes: 5px or 6px.
+
+COMPOSITION:
+- Artwork-only viewBox: 0 0 1080 1130.
+- Compose to fit the central artwork zone on the final 1080x1920 card.
+- Do not include title, captions, labels, lettering, or typography; those are added programmatically.
+
+SVG STRUCTURE:
+1. background
+2. midground
+3. characters and props
+
+TECHNICAL RESTRICTIONS:
+- No filters.
+- No gradients.
+- No scripts.
+- No external URLs.
+- No image elements.
+- No style elements.
+- No style attributes.
+- Valid XML.
+- Maximum 150 KB.
+
+PRESERVE:
+- Approved storyboard.
+- Character identity.
+- Scene meaning.
+- Visual continuity.
+`;

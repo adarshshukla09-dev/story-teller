@@ -1,85 +1,83 @@
-import { StateGraph, START, END } from "@langchain/langgraph";
-import { FilmState } from "./workflow.state.js";
-
+import { StateGraph, END } from "@langchain/langgraph";
+import { ProductionState } from "./workflow.state.js";
 import {
+  comprehensionNode,
   researchNode,
+  factCheckNode,
+  factCheckRouter,
   strategyNode,
   directorNode,
-  scriptNode,
-  factCheckNode,
-  comprehensionNode,
-  storyboardNode,
-  visualNode,
-  svgIllustrationNode,
-  compositionNode,
-  visualStyleNode,
-  continuityNode,
+  scriptwriterNode,
   qaNode,
+  storyboardNode,
+  compositionNode,
+  continuityNode,
+  visualDirectorNode,
+  svgIllustratorNode,
+  finalQaNode,
+  finalOutputNode,
+  qaRouter,
 } from "./workflow.node.js";
-import { isStage, MAX_REVISIONS, STAGE_TO_NODE } from "../agents/QA.agent.js";
 
-const NODES_PER_PASS = 13;
-const MAX_PASSES = MAX_REVISIONS + 1;
-export const RECURSION_LIMIT = Math.max(25, NODES_PER_PASS * MAX_PASSES + 5);
-
-const workflow = new StateGraph(FilmState)
-  .addNode("research", researchNode)
-  .addNode("strategy", strategyNode)
-  .addNode("director", directorNode)
-  .addNode("scriptwriter", scriptNode)
-  .addNode("factCheck", factCheckNode)
-  .addNode("comprehension", comprehensionNode)
-  .addNode("storyboardGenerator", storyboardNode)
-  .addNode("compositionPlanner", compositionNode)
-  .addNode("continuity", continuityNode)
-  .addNode("visualDirector", visualNode)
-  .addNode("svgIllustrator", svgIllustrationNode)
-  .addNode("qa", qaNode)
-  .addNode("artDirection", visualStyleNode)
-
-  // Sequential pre-production
-  .addEdge(START, "research")
-  .addEdge("research", "strategy")
-  .addEdge("strategy", "director")
-  .addEdge("director", "scriptwriter")
-
-  // Parallel Branch 1: Script Evaluation (Fan-out -> Fan-in)
-  .addEdge("scriptwriter", "factCheck")
-  .addEdge("scriptwriter", "comprehension")
-  .addEdge(["factCheck", "comprehension"], "storyboardGenerator")
-
-  // Parallel Branch 2: Visual Planning (Fan-out -> Fan-in)
-  .addEdge("storyboardGenerator", "compositionPlanner")
-  .addEdge("storyboardGenerator", "continuity")
-  .addEdge(["compositionPlanner", "continuity"], "visualDirector")
-
-  // QA Gate
-  .addEdge("visualDirector", "svgIllustrator")
-  .addEdge("svgIllustrator", "artDirection")
-  .addEdge("artDirection", "qa")
-  .addConditionalEdges(
-    "qa",
-    (state) => {
-      if (state.qualityStatus === "pass") return "end";
-      if (state.revisionCount >= MAX_REVISIONS) return "end";
-      if (!isStage(state.reviseTarget)) return "end";
-
-      const targetNode = STAGE_TO_NODE[state.reviseTarget];
-
-      // Note: If QA flags composition or continuity, rerunning just that single
-      // parallel branch is actually faster than rerunning both!
-      return targetNode;
-    },
-    {
-      end: END,
-      director: "director",
-      scriptwriter: "scriptwriter",
-      storyboardGenerator: "storyboardGenerator",
-      compositionPlanner: "compositionPlanner",
-      continuity: "continuity",
-      visualDirector: "visualDirector",
-      svgIllustrator: "svgIllustrator",
-    },
+function finalQaRouter(state: typeof ProductionState.State) {
+  if (state.finalQaStatus === "approved") return "finalOutputAgent";
+  throw new Error(
+    `Final production QA did not approve the package. Feedback: ${state.finalQaFeedback}`,
   );
+}
 
-export const filmGraph = workflow.compile();
+export function createProductionGraph() {
+  const workflow = new StateGraph(ProductionState)
+    // Add nodes
+    .addNode("comprehensionAgent", comprehensionNode)
+    .addNode("researchAgent", researchNode)
+    .addNode("factCheckAgent", factCheckNode)
+    .addNode("strategyAgent", strategyNode)
+    .addNode("directorAgent", directorNode)
+    .addNode("scriptwriterAgent", scriptwriterNode)
+    .addNode("qaAgent", qaNode)
+    .addNode("storyboardAgent", storyboardNode)
+    .addNode("compositionAgent", compositionNode)
+    .addNode("continuityAgent", continuityNode)
+    .addNode("visualDirectorAgent", visualDirectorNode)
+    .addNode("svgIllustratorAgent", svgIllustratorNode)
+    .addNode("finalQaAgent", finalQaNode)
+    .addNode("finalOutputAgent", finalOutputNode)
+
+    // Define edges and conditional routing
+    .addEdge("__start__", "comprehensionAgent")
+    .addEdge("comprehensionAgent", "researchAgent")
+    .addEdge("researchAgent", "factCheckAgent")
+
+    // Conditional fact-check routing using factCheckRouter
+    .addConditionalEdges("factCheckAgent", factCheckRouter, {
+      strategy: "strategyAgent",
+    })
+
+    .addEdge("strategyAgent", "directorAgent")
+    .addEdge("directorAgent", "scriptwriterAgent")
+    .addEdge("scriptwriterAgent", "qaAgent")
+
+    // Script QA conditional retry/approval loop
+    .addConditionalEdges("qaAgent", qaRouter, {
+      scriptwriterAgent: "scriptwriterAgent",
+      storyboardAgent: "storyboardAgent",
+    })
+
+    .addEdge("storyboardAgent", "compositionAgent")
+    .addEdge("compositionAgent", "continuityAgent")
+    .addEdge("continuityAgent", "visualDirectorAgent")
+    .addEdge("visualDirectorAgent", "svgIllustratorAgent")
+    .addEdge("svgIllustratorAgent", "finalQaAgent")
+
+    // Final QA conditional routing
+    .addConditionalEdges("finalQaAgent", finalQaRouter, {
+      finalOutputAgent: "finalOutputAgent",
+    })
+
+    .addEdge("finalOutputAgent", END);
+
+  return workflow.compile();
+}
+
+export const productionGraph = createProductionGraph();
