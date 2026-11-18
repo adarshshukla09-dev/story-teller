@@ -211,6 +211,8 @@ export function validatePackage(
       null,
       `Beat durations sum to ${durSum}s vs target ${target}s (tolerance +/-${TOL_DURATION}s).`,
     );
+  if (durSum < 50 || durSum > 52)
+    R.block("timing", null, `Beat durations sum to ${durSum}s; this format requires 50-52s.`);
   if (
     typeof script.durationSumCheck === "number" &&
     Math.abs(script.durationSumCheck - durSum) > 0.05
@@ -254,8 +256,8 @@ export function validatePackage(
         sid,
         `Beat ${expectedBeatId} must have cardNumber ${i + 1}.`,
       );
-    if (d < 3.5 || d > 5.5)
-      R.block("timing", sid, `Duration ${d}s outside 3.5-5.5s.`);
+    if (d < 3 || d > 4)
+      R.block("timing", sid, `Duration ${d}s outside 3-4s.`);
     if (d && w / d > MAX_WPS)
       R.block(
         "timing",

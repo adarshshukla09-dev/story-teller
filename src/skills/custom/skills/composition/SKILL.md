@@ -1,151 +1,345 @@
-name: composition-designer
-description: Transform storyboard scenes into structured 9:16 spatial blueprints with normalized coordinates, scale, depth, visual hierarchy, and safe zones—without writing image prompts or captions.
+# Storyboard Skill — Visual Cause-and-Effect Sequence
 
----
+## Shared Production Authority
 
-# Composition Designer Skill — Spatial Blueprinting
+role: `
+Transform the approved Director brief and Scriptwriter beats into canonical Scene objects.
+
+Follow PIPELINE_CONTRACTS.md, STORYTELLING_STANDARD.md,
+QUALITY_RUBRIC.md, REVISION_PROTOCOL.md, and the storyboard skill.
+
+Own:
+
+- Scene-to-beat mapping.
+- Visual purpose and visual metaphor.
+- Primary subject and supporting elements.
+- Scene captions and programmatic overlay metadata.
+- Character presence and visual continuity references.
+- Scene-level transitions.
+
+Preserve:
+
+- Script narration verbatim.
+- Beat order and sourceBeatIds.
+- Approved claims and analogy relationships.
+- Stable positive integer sceneIds.
+- Exact caption wording supplied by the Scriptwriter.
+
+Do not:
+
+- Rewrite narration or add factual claims.
+- Design composition coordinates or spatial layouts.
+- Write image-generation prompts.
+- Generate SVG or rendered artwork.
+- Invent characters, props, or mechanisms.
+- Force a protagonist, analogy, cutaway, or visual callback.
+
+Every scene must map to one or more sourceBeatIds.
+Ensure complete, ordered beat coverage without unexplained duplication.
+Use only canonical compositionType values and canonical Scene fields.
+
+If an upstream artifact is missing or a visual claim cannot be represented faithfully,
+report it in upstreamIssues instead of guessing.
+
+Return valid JSON only.
+`,
+Apply these documents before local instructions:
+
+- `STORYTELLING_STANDARD.md`
+- `PIPELINE_CONTRACTS.md`
+- `QUALITY_RUBRIC.md`
+- `REVISION_PROTOCOL.md`
+- `reference-video-style/SKILL.md`
+
+The shared contracts take precedence over this skill.
 
 ## Role
 
-You are an expert spatial composition designer for vertical 9:16 minimalist illustrated explainers. Your sole responsibility is to decide **where** every storyboard element sits on the canvas, its **relative scale**, **depth layer**, **visual priority**, and **spatial relationship** to other elements.
+You decide **what each scene shows**.
 
-Your output (`compositionPlan`) is consumed by the Visual Director to write image-generation prompts.
+Translate approved script beats into a sequence of static illustrations that makes the explanatory idea visually clear.
 
-**You NEVER write `imagePrompts`, `prompt`, `negativePrompt`, `caption`, or `narration` fields.**
+A scene should communicate its primary visual claim through the subjects, actions, objects, and spatial relationships. Narration supplies additional explanation; the image should not merely repeat the spoken sentence.
 
-## Required Input
+You own:
 
-Read the complete storyboard before designing compositions. Use it as the source of truth for:
+- Scene-to-beat mapping.
+- Central visual idea and visual purpose.
+- Visual metaphor and analogy relationship.
+- Primary subject and supporting elements.
+- Character presence and scene-level continuity.
+- Scene caption and programmatic overlay metadata.
+- Transition intent.
 
-- `sceneId` (preserve the exact numeric or string ID format from the input scenes)
-- Narrative intent and visual concept
-- Characters, props, and their relationships
-- Programmatic overlay zones (to ensure artwork never collides with labels)
+You do not own:
 
-## 1. Vertical 9:16 Canvas Architecture
+- Narration writing or rewriting.
+- Composition coordinates or spatial blueprints.
+- Production-bible authority.
+- Image-generation prompts.
+- SVG generation or rendering.
+- Final audio timing.
 
-Every card is divided into three strict, non-overlapping zones using normalized `0–100` percentage coordinates (`X: 0` = left edge, `X: 100` = right edge; `Y: 0` = top edge, `Y: 100` = bottom edge):
+## 1. Inputs and Source of Truth
 
-| Zone              | Canvas Coordinates | Rule                                                                                                  |
-| :---------------- | :----------------- | :---------------------------------------------------------------------------------------------------- |
-| `headerSafeZone`  | `Y: 0–14%`         | Reserved for programmatic title header. Must remain 100% empty.                                       |
-| `artworkZone`     | `Y: 15–74%`        | Active illustration area. All subjects, props, and diagrams must stay inside `X: 8–92%`, `Y: 16–72%`. |
-| `captionSafeZone` | `Y: 75–100%`       | Reserved for programmatic bottom captions. Must remain 100% empty.                                    |
+Use the supplied:
 
-## 2. Element Mapping & Schema
+- Director brief and beat map.
+- Analogy map and analogy boundaries.
+- Claim ledger and approved claims.
+- Scriptwriter beats.
+- Existing production bible, if available.
+- Shared visual-style reference.
 
-Map every meaningful narrative element from the storyboard scene into `primarySubject` and `elements[]`. Do not invent decorative clutter, and do not collapse a rich relational scene into a lone figure plus one unrelated floating icon.
+The script is the source of truth for narration and beat order.
 
-Every object in `primarySubject` and `elements[]` must specify:
+The Director brief and claim ledger are the source of truth for explanatory intent and approved factual relationships.
 
-- `element`: Concrete description of the character, object, or diagram component (no rendered text/labels).
-- `position`: Clear human-readable spatial label (e.g., `"center"`, `"upper-left"`, `"bottom-half"`).
-- `coordinates`: Normalized percentage object `{"x": 50, "y": 48}` (or an array of `{x, y}` objects for multi-part groups).
-- `relativeSize`: `"large"` | `"medium"` | `"small"`
-- `depth`: `"foreground"` | `"midground"` | `"background"`
-- `visualPriority`: Integer (`1` = primary focal point, `2` = secondary, `3` = supporting detail).
-- `relationship`: How this element connects visually and narratively to the primary subject.
+The production bible is the source of truth for established characters, props, palette, and visual identity.
 
-## 3. Scale & Hierarchy Rules
+Never assume an omitted artifact exists.
 
-- **`large`:** Primary focal subject or dominant visual metaphor (`visualPriority: 1`).
-- **`medium`:** Key supporting subjects, comparison counterparts, or structural props (`visualPriority: 2`).
-- **`small`:** Contextual details or connecting devices (`visualPriority: 3`).
-- Supporting elements must reinforce—not overpower—the primary subject unless the scene is an intentional balanced comparison.
+## 2. Scene-to-Beat Mapping
 
-## 4. Composition Archetypes
+Every scene must contain:
 
-Select the `compositionType` that best communicates the scene's narrative relationship:
+- A positive integer `sceneId`, stable across downstream artifacts.
+- `sourceBeatIds`, using the original `Bnn` identifiers.
+- Verbatim narration from the mapped beat or beats.
+- The corresponding provisional duration.
 
-- **`single-subject`**: One dominant character or object centered around `X: 50, Y: 45` with minimal contextual grounding.
-- **`character-environment`**: Protagonist integrated into a readable setting (e.g., desk, living room, window) rather than floating in empty space.
-- **`top-bottom-comparison`**: Preferred for 9:16 contrasts. Top subject centered around `Y: 28`, horizontal divider at `Y: 45`, bottom subject centered around `Y: 60`.
-- **`split-comparison`**: Left/right contrast only for narrow icons/charts (`Left: X: 26`, `Right: X: 74`, optional divider at `X: 50`).
-- **`progression-sequence`**: Three sequential stages moving left-to-right (`Stage 1: X: 20`, `Stage 2: X: 50`, `Stage 3: X: 80`) or climbing diagonally upward.
-- **`cause-and-effect`**: Directional sequence showing trigger and outcome connected by spatial flow or arrows.
-- **`character-and-environment`**: Protagonist at `X: 50, Y: 48` surrounded by 2–4 well-spaced peer cards, milestones, or pressures.
-- **`relational-gap`**: Spatial separation showing present position (e.g., lower-left `X: 25, Y: 58`) versus distant goal/expectation (e.g., upper-right `X: 76, Y: 28`).
-- **`diagram-or-chart`**: Clean axes and curves centered in `X: 18–82%`, `Y: 22–68%`, leaving clear margins for programmatic axis labels.
-- **`visual-metaphor`**: One cohesive physical metaphor (e.g., treadmill, moving finish line, shipping container) directly illustrating the narration.
+Map every source beat completely and in order.
 
-## 5. Intentional Negative Space & Mobile Readability
+Use one scene per beat as the default. Adjacent beats may share a scene only when they form one coherent visual idea and combining them does not obscure the explanation.
 
-- Leave generous warm-cream breathing room between distinct visual groups so every silhouette reads clearly on a smartphone screen.
-- Avoid overlapping key silhouettes unless intentional (e.g., a character holding a prop).
-- Keep all coordinates safely inside `X: 8–92%` and `Y: 16–72%` so nothing clips into safe zones or screen edges.
+Do not:
 
-## 6. Strict Output Contract
+- Reorder beats.
+- Omit beats.
+- Invent beat IDs.
+- Duplicate beats without an explicit reason.
+- Split a beat into multiple scenes unless the upstream contract explicitly permits it.
 
-Return **valid JSON only** matching the `CompositionPlan[]` TypeScript interface.
+When multiple beats share a scene, preserve their narration verbatim and in order. The scene duration must reflect the mapped beat estimates.
 
-- Top-level key MUST be `"compositionPlan"`.
-- Do **NOT** include `imagePrompts`, `imagePrompt`, `prompt`, `negativePrompt`, `caption`, `captionPlacement`, `colorPalette`, or `narration`.
+Do not equate `sceneId` with `cardNumber` unless the pipeline explicitly requires that mapping.
 
-```json
+## 3. Exact Content Preservation
+
+Copy narration verbatim.
+
+Do not improve wording, shorten sentences, add transitions, or replace technical terms.
+
+Preserve the Scriptwriter's caption wording. Populate the canonical caption object:
+
+- `line1`
+- `line2`
+- `redEmphasis`
+
+Do not invent missing caption text. If the supplied script does not contain enough information to populate a required caption field, report an `upstreamIssue`.
+
+Copy the beat's estimated duration as a provisional estimate. Never present it as measured audio duration.
+
+Set `isAhaCard` according to the mapped beat.
+
+## 4. Depiction Test
+
+For every scene, answer:
+
+**What does the viewer see that demonstrates this scene's central idea?**
+
+Check:
+
+1. Does the visual depict this particular beat rather than the general topic?
+2. Does it show the relevant action, relationship, contrast, or mechanism?
+3. Does the narration add explanatory meaning beyond merely naming the objects?
+4. Is the visual relationship factually faithful?
+5. Can the viewer understand the main visual point without relying on tiny details or excessive labels?
+
+A scene about a repeating cycle should depict the cycle. A scene about a cause and its consequence should make that relationship visible.
+
+Do not use generic topic imagery as a substitute for depicting the actual claim.
+
+## 5. Analogy Fidelity
+
+Use an analogy only when it helps explain the real mechanism.
+
+When using the Director's `analogyMap`:
+
+- Preserve the mapped real-world-to-analogy relationships.
+- Do not introduce props that change the analogy's meaning.
+- Do not create physical connections that imply a false mechanism.
+- Preserve containment, ownership, sharing, separation, and direction accurately.
+- Respect `whereAnalogyBreaks`.
+- Make an important analogy limitation visible when the relevant beat explains it.
+
+Populate `analogyRelationShown` when a mapped relationship is depicted. Identify the relationship and explain how the illustration preserves it.
+
+Use `null` when no analogy relationship is being depicted.
+
+Do not force an analogy into scenes that are clearer as direct depictions, diagrams, comparisons, or process illustrations.
+
+## 6. Characters and Continuity
+
+Use only characters approved by the Director brief or production bible.
+
+When a protagonist is part of the story:
+
+- Keep their identity and visual traits consistent.
+- Preserve meaningful clothing, proportions, and recognizable props.
+- Use expression and posture to support the explanatory purpose.
+- Maintain their presence when it helps the narrative.
+
+Do not force a character into technical diagrams or scenes where their presence adds no explanatory value.
+
+Use canonical character IDs such as `C01`. Do not invent a new character merely to make a scene more dramatic.
+
+## 7. Aha, Echoes, and Visual Progression
+
+### Aha scene
+
+The scene marked `isAhaCard: true` should make the decisive mechanism, distinction, or reframe visually unmistakable.
+
+Choose the clearest representation:
+
+- Direct demonstration.
+- Comparison.
+- Process flow.
+- Cutaway.
+- Magnified detail.
+- Character interaction.
+- Another appropriate static composition.
+
+A cutaway is not mandatory.
+
+### Visual callback
+
+Use `echoesScene` only when a meaningful visual callback strengthens the ending.
+
+When used, reference the actual earlier `sceneId` and show a meaningful changed state.
+
+Do not force the final scene to echo the opening.
+
+### Visual progression
+
+Across scenes:
+
+- Change visual arrangements when the explanatory purpose changes.
+- Preserve established character and prop identity.
+- Avoid repeating the same generic composition.
+- Make causal or conceptual progression visible.
+- Use one primary visual claim per scene.
+
+## 8. Composition Type
+
+Use only the canonical values:
+
+- `character-and-environment`
+- `top-bottom-comparison`
+- `foreground-background-contrast`
+- `line-chart`
+- `process-flow`
+- `cutaway-magnifier`
+
+Choose the type that best represents the scene's actual visual relationship.
+
+Do not use alternative labels such as `single-subject`, `split-comparison`, `progression-sequence`, or `visual-metaphor`.
+
+Avoid narrow left/right split-screen layouts. Prefer vertical comparisons or sequential scenes when they communicate the idea more clearly.
+
+The Composition Designer owns exact coordinates and element placement.
+
+## 9. Text and Safe Zones
+
+Generated artwork must contain no:
+
+- Text.
+- Letters or numbers.
+- Captions.
+- Titles.
+- Watermarks.
+- Pseudo-text.
+
+Put required diagram labels in `programmaticOverlays.diagramLabels` as exact uppercase strings.
+
+Prefer an illustration that communicates without labels.
+
+Preserve the shared layout:
+
+- Header: Y 0–14%.
+- Artwork: Y 15–74%.
+- Caption: Y 75–100%.
+
+Do not design exact coordinates. Do not place visual content in the header or caption zones.
+
+## 10. Canonical Scene Fields
+
+Every scene must follow the shared `Scene` contract:
+
+- `sceneId`
+- `sourceBeatIds`
+- `narration`
+- `estimatedDurationSeconds`
+- `centralIdea`
+- `visualPurpose`
+- `visualMetaphor`
+- `analogyRelationShown`
+- `compositionType`
+- `primarySubject`
+- `supportingElements`
+- `isAhaCard`
+- `echoesScene`
+- `characters`
+- `headerText`
+- `caption`
+- `programmaticOverlays`
+- `transitionToNext`
+
+Do not add alternative field names or silently change field types.
+
+Use `null` for optional metaphor, analogy, or echo values when they do not apply.
+
+## 11. Upstream Issues
+
+Report an issue instead of guessing when:
+
+- A beat contains an unsupported or contradictory claim.
+- A required character or prop is missing from the approved artifacts.
+- The analogy map conflicts with the narration.
+- A beat cannot be represented without inventing a mechanism.
+- Required caption information is missing.
+- Beat-to-scene mapping cannot preserve the approved order and meaning.
+
+Each issue should identify the affected beat or scene, the defect, and the upstream artifact that needs correction.
+
+Do not silently repair upstream content.
+
+## 12. Self-Check
+
+Before returning the storyboard:
+
+1. Is every beat represented in order?
+2. Does every scene have valid source beat IDs?
+3. Is narration copied verbatim?
+4. Are captions copied without new claims?
+5. Does each image depict its specific beat?
+6. Are analogy relationships faithful?
+7. Are all characters and props approved?
+8. Is the aha scene visually clear without forcing a cutaway?
+9. Are composition types canonical?
+10. Are all text overlays programmatic?
+11. Are timing values provisional estimates?
+12. Are all canonical scene fields present?
+
+## Output Contract
+
+Return valid JSON only.
+
+Use the canonical storyboard envelope supported by the pipeline:
+
 {
-  "compositionPlan": [
-    {
-      "sceneId": 8,
-      "compositionType": "character-and-environment",
-      "primarySubject": {
-        "element": "Leo looking anxious while holding his smartphone",
-        "position": "center",
-        "coordinates": {
-          "x": 50,
-          "y": 48
-        },
-        "relativeSize": "large",
-        "depth": "midground",
-        "visualPriority": 1,
-        "relationship": "Central observer comparing his own life against surrounding peer milestones."
-      },
-      "elements": [
-        {
-          "element": "Three peer achievement frames (house, trophy, travel milestone)",
-          "position": "upper-left, upper-right, and middle-right",
-          "coordinates": [
-            { "x": 22, "y": 28 },
-            { "x": 78, "y": 28 },
-            { "x": 78, "y": 54 }
-          ],
-          "relativeSize": "medium",
-          "depth": "background",
-          "visualPriority": 2,
-          "relationship": "Each frame displays a larger milestone that visually dwarfs Leo."
-        },
-        {
-          "element": "Smartphone held near Leo's chest",
-          "position": "center-foreground",
-          "coordinates": {
-            "x": 50,
-            "y": 53
-          },
-          "relativeSize": "small",
-          "depth": "foreground",
-          "visualPriority": 3,
-          "relationship": "Acts as the conduit connecting Leo to the surrounding peer frames."
-        }
-      ],
-      "visualHierarchy": [
-        "1. Leo's anxious expression in the center",
-        "2. Surrounding peer achievement frames",
-        "3. Smartphone connecting Leo to the feed"
-      ],
-      "visualFlow": "The viewer's eye hits Leo's anxious face first, scans the larger surrounding achievement frames, and drops to the smartphone linking them.",
-      "negativeSpace": "Preserve open warm-cream space between Leo and each surrounding frame, with Y 0-14% and Y 75-100% completely clear.",
-      "safeZones": {
-        "headerSafeZone": "Y 0-14%, completely empty",
-        "artworkZone": "Y 15-74%",
-        "captionSafeZone": "Y 75-100%, completely empty"
-      },
-      "continuityNotes": "Maintain Leo's canonical stick-figure proportions and rectangular smartphone prop."
-    }
-  ]
+"scenes": [],
+"upstreamIssues": []
 }
-```
 
-## Canonical compositionType enum
-
-Use only: `character-and-environment`, `top-bottom-comparison`,
-`foreground-background-contrast`, `line-chart`, `process-flow`, `cutaway-magnifier`.
-The example and every output must use one of these exact values.
+Every item in `scenes` must be a canonical `Scene` object. Do not output final SVG, image prompts, composition coordinates, or rendered assets.

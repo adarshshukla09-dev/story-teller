@@ -140,7 +140,7 @@ A script is ready only when:
 - A non-specialist can retell the idea without repeating the script verbatim.
 - A domain-aware reviewer would not call the explanation misleading.
 
-## 11. Excellence protocol: make 8.5–9/10 repeatable, not automatic
+## 11. Excellence protocol: target 9/10, never award it automatically
 Use this protocol for every topic, regardless of domain. It is a design-and-revision standard, not a promise that every topic or source set can earn the target.
 
 ### A. Find the strongest truthful story engine
@@ -159,7 +159,7 @@ The aha is not a slogan, surprising fact, or dramatic pause. It is the point whe
 Resolve the opening question directly. Leave the viewer with one portable sentence, prediction rule, distinction, or implication. A practical application is valuable when warranted, but do not bolt on generic advice. The final line should add meaning rather than merely repeat the title or central idea.
 
 ### F. Score calibration
-The target is a creative average of at least 8.5/10, with 9/10 as an exceptional stretch result. Score the actual package, never the intention. A 9–10 requires unusually strong evidence: precise curiosity, an earned narrative turn, clear mechanism, memorable but accurate expression, purposeful visuals, and a payoff that changes the opening's meaning. A compliant or merely competent output is normally 7–8. Averages below 8.5 should trigger revision when a specific, achievable improvement exists; do not damage accuracy or force artificial emotion to raise a score. No individual score may be raised to meet a target.
+The requested release target is a creative average of at least 9/10. Score the actual package, never the intention. A 9–10 requires unusually strong evidence: precise curiosity, an earned narrative turn, clear mechanism, memorable but accurate expression, purposeful visuals, and a payoff that changes the opening's meaning. A compliant or merely competent output is normally 7–8. Averages below 9 should trigger revision when a specific, achievable improvement exists; do not damage accuracy or force artificial emotion to raise a score. No individual score may be raised to meet a target.
 
 ### G. Cross-domain adaptation check
 Before approval, answer the relevant questions:

@@ -6,7 +6,7 @@ description: Develops high-quality, accurate explanatory narratives across techn
 # Universal Explainer Storycraft
 
 ## Mission
-Make the viewer curious, help them understand the real mechanism or causal story, and leave them able to explain one important idea. Aim for an independently earned creative score of 8.5+/10; 9+ is exceptional, never assumed. Follow `STORYTELLING_STANDARD.md`, `QUALITY_RUBRIC.md`, and the pipeline contracts.
+Make the viewer curious, help them understand the real mechanism or causal story, and leave them able to explain one important idea. The requested release target is an independently earned creative score of 9+/10; never assume or inflate it. Follow `STORYTELLING_STANDARD.md`, `QUALITY_RUBRIC.md`, and the pipeline contracts.
 
 ## 1. Diagnose the topic before making it emotional
 Identify the domain/subdomain, audience, viewer's likely mental model, exact question, central idea, evidence/mechanism, and most important limitation. Find the strongest viewer-sized entry point. This may be a human experience, a technical task, a system failure, a historical constraint, a surprising observation, or a decision. Do not force a fictional protagonist or a universal human-relatable opening.
@@ -47,7 +47,7 @@ Answer the opening question directly. Leave one portable insight, prediction rul
 - All domains: map material claims to dossier sources or flag them for verification.
 
 ## 10. Quality review and scoring
-Score the ten dimensions in `QUALITY_RUBRIC.md` from the actual package. 9–10 requires exceptional evidence; compliance alone is not excellence. Every score below 9 needs a concrete weakness and improvement. Aim for an average of at least 8.5, but never inflate scores, sacrifice factual integrity, or force emotion/analogy to reach it. Identify the three highest-leverage improvements and revise them where possible.
+Score the ten dimensions in `QUALITY_RUBRIC.md` from the actual package. 9–10 requires exceptional evidence; compliance alone is not excellence. Every score below 9 needs a concrete weakness and improvement. Aim for an average of at least 9, but never inflate scores, sacrifice factual integrity, or force emotion/analogy to reach it. Identify the three highest-leverage improvements and revise them where possible.
 
 ## 11. Final retell test
 Can a viewer state the puzzle, explain what caused the outcome, repeat the central idea, and name one important boundary after one viewing? If not, identify the missing explanation and revise the earliest responsible stage.

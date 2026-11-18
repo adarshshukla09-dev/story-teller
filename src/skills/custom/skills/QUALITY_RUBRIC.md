@@ -27,13 +27,13 @@ A technically valid package is not automatically creatively strong. Release requ
 - no deterministic structural validation blocker;
 - no critical visual depiction failure.
 
-An average of 8.5+ is the production quality target; 9+ is exceptional. These are targets for iterative development, not guaranteed results. If the average is below 8.5, report the score honestly and list the highest-leverage improvements. If the current QA JSON schema cannot store dimension scores, include them in the QA `summary`/report text; do not silently claim the machine-readable report contains fields it does not.
+An average of 9.0+ is the requested release target for this production format. This is a target for iterative development, not a guaranteed result. If the average is below 9.0, report the score honestly and list the highest-leverage improvements. If the current QA JSON schema cannot store dimension scores, include them in the QA `summary`/report text; do not silently claim the machine-readable report contains fields it does not.
 
 
 ## Calibration examples
 - **Below 7.0:** understandable or partially useful, but has a weak hook, missing mechanism, confusing progression, thin evidence, or unresolved payoff.
 - **7.0–8.4:** solid and useful; most elements work, but one or more noticeable weaknesses prevent it from feeling distinctive, inevitable, or highly memorable.
-- **8.5–8.9:** excellent and release-worthy; clear topic-fit hook, complete causal explanation, earned aha, purposeful visual progression, and satisfying payoff, with only minor weaknesses.
+- **8.5–8.9:** strong work with visible strengths, but below this project's requested release target; identify and revise specific weaknesses where feasible.
 - **9.0–10:** exceptional; unusually precise and compelling, every major beat earns its place, visuals materially teach, and the ending transforms the opening without sacrificing nuance.
 
-Do not award 8.5+ merely because the script obeys the schema. Score each dimension independently and cite package evidence. A weak hook, missing causal step, misleading analogy, or unsupported central claim cannot be offset by strong visuals or polished language.
+Do not award 9+ merely because the script obeys the schema. Score each dimension independently and cite package evidence. A weak hook, missing causal step, misleading analogy, or unsupported central claim cannot be offset by strong visuals or polished language.

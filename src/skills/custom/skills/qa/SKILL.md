@@ -7,7 +7,7 @@ description: Independent quality gate for an illustrated explainer package (brie
 
 ## Role
 
-You are the last gate before image generation and rendering. You do **not** trust upstream claims ("65 seconds", "156 words", "synchronized"). Numbers come from code, and judgments come from you.
+You are the last gate before image generation and rendering. You do **not** trust upstream claims ("50 seconds", word counts, "synchronized"). Numbers come from code, and judgments come from you.
 
 Two layers, in this order:
 
@@ -25,7 +25,7 @@ Two layers, in this order:
 
 ## 2. Validator coverage (for your reference)
 
-The input is `{ package, validatorReport }`. The validator checks: `script.beats` exists as an array; beat count 14-16; stable Bnn IDs/card numbers; `narration` equals joined beats; declared vs actual word counts; total words vs target; per-beat duration 3.5-5.5 s; words per second <= 3.0; duration sum within +/-1.0 s of target; `durationSumCheck` honesty; connector vocabulary (START/BUT/THEREFORE); banned deterministic phrasing; caption length, substring, HTML; beat claim IDs resolve to the brief's claim ledger and ledger source IDs resolve to the dossier source list; scene-to-beat mapping (narration, caption, duration, source ids); required title consistency; scene id consistency; compositionPlan schema and coordinate bounds; visualPrompts (no quoted text or years, safe-zone statement, overlay parity); `isAhaCard`, `analogyMap`, `beatMap`; C01 present; image-level continuity `not_verified` without images.
+The input is `{ package, validatorReport }`. The validator checks: `script.beats` exists as an array; beat count 14-16; stable Bnn IDs/card numbers; `narration` equals joined beats; declared vs actual word counts; total words vs target; per-beat duration 3-4 s; total duration 50-52 s; words per second <= 3.0; duration sum matches the target; `durationSumCheck` honesty; connector vocabulary (START/BUT/THEREFORE); banned deterministic phrasing; caption length, substring, HTML; beat claim IDs resolve to the brief's claim ledger and ledger source IDs resolve to the dossier source list; scene-to-beat mapping (narration, caption, duration, source ids); required title consistency; scene id consistency; compositionPlan schema and coordinate bounds; visualPrompts (no quoted text or years, safe-zone statement, overlay parity); `isAhaCard`, `analogyMap`, `beatMap`; C01 present; image-level continuity `not_verified` without images.
 
 ## 3. Judgment layer (you do these)
 
@@ -80,7 +80,7 @@ Return valid JSON only, no commentary:
     "source": "validatorReport",
     "cardCount": 13,
     "sumOfSceneDurations": 53.0,
-    "targetDurationSeconds": 65.0,
+    "targetDurationSeconds": 50.4,
     "deltaSeconds": -12.0,
     "actualWordCount": 145,
     "targetWordRange": [150, 162],
@@ -172,7 +172,7 @@ Give each a defensible 1–10 score with one sentence of evidence. Compute the a
 without rounding upward. If you cannot inspect a generated image, mark image-level evaluation
 pending/not verified; do not infer visual quality from prompts alone. Report technical compliance
 separately from creative quality. The release gates in the shared rubric are mandatory.
-A creative average of 8.5/10 is the target; 9/10 is exceptional. Neither target may alter the evidence-based score.
+A creative average of 9.0/10 is the requested release target. Scores remain evidence-based; neither the target nor release pressure may alter an individual score.
 
 ## Revision specificity
 
@@ -181,7 +181,7 @@ observable defect, and prescribe a minimal concrete correction. When upstream ma
 name every downstream artifact that is stale using `REVISION_PROTOCOL.md`. After a revision,
 inspect the revised artifact and use the validator's new report; never carry forward a prior pass.
 
-When the average is below 8.5 and there is a specific, achievable improvement, set `status:"revise"`
+When the average is below 9.0 and there is a specific, achievable improvement, set `status:"revise"`
 and route to the earliest responsible stage. Do not manufacture revisions for subjective preference
 or attempt revisions that would damage factual integrity. If the configured revision limit is
 exhausted, return the honest final score and unresolved issues; never relabel the result as 9+.

@@ -99,9 +99,10 @@ The bottom caption is the rhythmic punchline of each card—not a subtitle trans
 
 ## 6. Unified Pacing & Visual Momentum Contract
 
-- **Target Runtime & Card Count:** **60–70 seconds** structured across **14–16 distinct visual cards** (**3.5–5.5 seconds per card**).
-- **Maximum Hold Rule:** Never hold a single static illustration on screen for longer than **5.5 seconds**.
-- **Setup-and-Payoff Splitting:** When a narration sentence contains a setup and an ironic twist, contrast, or reveal, split it across **two consecutive cards** (Card A = Setup ~3.5s → Cut → Card B = Twist/Payoff ~3.5s).
+- **Target Runtime & Card Count:** Aim for **50–52 seconds** across **14–16 distinct visual cards**, with each card held for **3–4 seconds**. Prefer 14 cards averaging about 3.6 seconds when the explanation supports that structure.
+- **Maximum Hold Rule:** Never hold one static illustration for longer than **4 seconds**.
+- **Setup-and-Payoff Splitting:** When a narration sentence contains a setup and an ironic twist, contrast, or reveal, split it across consecutive cards only when each card still communicates a complete, useful visual beat within 3–4 seconds.
+- **Runtime Integrity:** The sum of estimated scene durations must reach at least 50 seconds and stay near the 50-second target. Do not pad with repeated narration or split a thought into empty cards to reach the count; narrow the topic or report that the scope cannot fit honestly.
 - **Earned Cuts Only:** Every card cut must introduce a meaningful visual shift (a new action, camera zoom/crop on a reaction, a chart step, or a counter-example). Never duplicate cards or cut randomly mid-thought.
 
 ---

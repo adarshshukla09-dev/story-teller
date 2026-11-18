@@ -64,6 +64,10 @@ export const skillRegistry = {
     { repository: "custom", name: "reference-video-style" },
     { repository: "custom", name: "renderer" },
   ],
+  finalqa: [
+    { repository: "custom", name: "reference-video-style" },
+    { repository: "custom", name: "finalQA" },
+  ],
 } satisfies Record<string, SkillReference[]>;
 
 export type AgentTask = keyof typeof skillRegistry;
