@@ -1,5 +1,5 @@
-import { runAgent } from "./base.agent.js";
 import type { Script } from "../schema/script.schema.js";
+import { runAgent } from "./base.agent.js";
 
 export type Stage =
   | "brief"
@@ -11,7 +11,13 @@ export type Stage =
   | "svgIllustrations";
 
 export const STAGE_ORDER: Stage[] = [
-  "brief", "script", "storyboard", "composition", "continuity", "visualPrompts", "svgIllustrations",
+  "brief",
+  "script",
+  "storyboard",
+  "composition",
+  "continuity",
+  "visualPrompts",
+  "svgIllustrations",
 ];
 
 export const STAGE_TO_NODE: Record<Stage, string> = {
@@ -24,7 +30,10 @@ export const STAGE_TO_NODE: Record<Stage, string> = {
   svgIllustrations: "svgIllustrator",
 };
 
-const configuredRevisions = Number.parseInt(process.env.MAX_REVISIONS ?? "3", 10);
+const configuredRevisions = Number.parseInt(
+  process.env.MAX_REVISIONS ?? "3",
+  10,
+);
 export const MAX_REVISIONS = Number.isFinite(configuredRevisions)
   ? Math.max(0, Math.min(5, configuredRevisions))
   : 3;
@@ -35,11 +44,18 @@ export function isStage(value: unknown): value is Stage {
 
 export function earliestStage(stages: Stage[]): Stage | null {
   if (!stages.length) return null;
-  return [...stages].sort((a, b) => STAGE_ORDER.indexOf(a) - STAGE_ORDER.indexOf(b))[0]!;
+  return [...stages].sort(
+    (a, b) => STAGE_ORDER.indexOf(a) - STAGE_ORDER.indexOf(b),
+  )[0]!;
 }
 
 export function normalizeScript(input: Script): Script {
-  if (!input || typeof input !== "object" || !Array.isArray(input.beats) || input.beats.length === 0) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    !Array.isArray(input.beats) ||
+    input.beats.length === 0
+  ) {
     throw new Error("Script must contain a non-empty beats array.");
   }
 
@@ -50,9 +66,13 @@ export function normalizeScript(input: Script): Script {
     const beatId = `B${String(index + 1).padStart(2, "0")}`;
     const duration = Number(beat.estimatedDurationSeconds);
     if (!Number.isFinite(duration) || duration <= 0) {
-      throw new Error(`Script beat ${beatId} must have a positive estimatedDurationSeconds.`);
+      throw new Error(
+        `Script beat ${beatId} must have a positive estimatedDurationSeconds.`,
+      );
     }
-    const wordCount = (beat.narration.match(/[A-Za-z0-9]+(?:['’\\-][A-Za-z0-9]+)*/g) ?? []).length;
+    const wordCount = (
+      beat.narration.match(/[A-Za-z0-9]+(?:['’\\-][A-Za-z0-9]+)*/g) ?? []
+    ).length;
     return {
       ...beat,
       beatId,
@@ -62,8 +82,15 @@ export function normalizeScript(input: Script): Script {
     };
   });
 
-  const totalWordCount = beats.reduce((sum, beat) => sum + (beat.wordCount ?? 0), 0);
-  const durationSumCheck = Number(beats.reduce((sum, beat) => sum + beat.estimatedDurationSeconds, 0).toFixed(2));
+  const totalWordCount = beats.reduce(
+    (sum, beat) => sum + (beat.wordCount ?? 0),
+    0,
+  );
+  const durationSumCheck = Number(
+    beats
+      .reduce((sum, beat) => sum + beat.estimatedDurationSeconds, 0)
+      .toFixed(2),
+  );
   return {
     ...input,
     beats,
@@ -74,17 +101,26 @@ export function normalizeScript(input: Script): Script {
   };
 }
 
-export function withFeedback(input: string, state: { qaFeedback?: string }, stage: Stage): string {
+export function withFeedback(
+  input: string,
+  state: { qaFeedback?: string },
+  stage: Stage,
+): string {
   const feedback = state.qaFeedback?.trim();
-  return feedback ? `${input}\n\nQA REVISION FEEDBACK FOR ${stage.toUpperCase()}:\n${feedback}` : input;
+  return feedback
+    ? `${input}\n\nQA REVISION FEEDBACK FOR ${stage.toUpperCase()}:\n${feedback}`
+    : input;
 }
 
 export function stageForIssue(issue: any): Stage | null {
   const gate = String(issue?.gate ?? issue?.category ?? "").toLowerCase();
-  if (/brief|claim|source|epistemic|fact|accuracy|central-idea/.test(gate)) return "brief";
-  if (/script|narrative|storycraft|comprehension|timing|caption/.test(gate)) return "script";
+  if (/brief|claim|source|epistemic|fact|accuracy|central-idea/.test(gate))
+    return "brief";
+  if (/script|narrative|storycraft|comprehension|timing|caption/.test(gate))
+    return "script";
   if (/storyboard|scene|depiction|analogy/.test(gate)) return "storyboard";
-  if (/composition|layout|coordinate|safe-zone/.test(gate)) return "composition";
+  if (/composition|layout|coordinate|safe-zone/.test(gate))
+    return "composition";
   if (/continuity|character|prop|palette|style/.test(gate)) return "continuity";
   if (/svg|illustration|asset/.test(gate)) return "svgIllustrations";
   if (/visual|prompt|artwork/.test(gate)) return "visualPrompts";
@@ -100,9 +136,23 @@ export function buildFeedback(issues: any[], qa: any): string {
   return lines.join("\n");
 }
 
-export async function qaAgent(input: string) {
+export async function qaAgent(input: string): Promise<string> {
   return runAgent(
-    { name: "Explainer QA Gatekeeper", task: "qa", temperature: 0.1 },
+    {
+      name: "Explainer QA Gatekeeper",
+      task: "qa",
+      temperature: 0.1,
+    },
+    input,
+  );
+}
+export async function finalQAagent(input: string) {
+  return runAgent(
+    {
+      name: "final QA ",
+      task: "finalqa",
+      temperature: 0.2,
+    },
     input,
   );
 }

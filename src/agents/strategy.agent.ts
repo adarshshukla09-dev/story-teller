@@ -5,7 +5,7 @@ export async function strategyAgent(input: string) {
     {
       name: "Explanation Strategy Designer",
       task: "strategy",
-      temperature: 0.5,
+      temperature: 0.3,
     },
     input,
   );

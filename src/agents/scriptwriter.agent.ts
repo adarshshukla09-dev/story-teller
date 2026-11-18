@@ -5,7 +5,7 @@ export async function scriptwriterAgent(input: string) {
     {
       name: "Universal Explainer Scriptwriter",
       task: "script",
-      temperature: 0.7,
+      temperature: 0.4,
     },
     input,
   );

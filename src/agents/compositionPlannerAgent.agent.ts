@@ -1,11 +1,11 @@
 import { runAgent } from "./base.agent.js";
 
-export async function compositionPlannerAgent(input: string) {
+export async function storyboardAgent(input: string) {
   return runAgent(
     {
-      name: "Illustrated Visual Composition Designer",
-      task: "composition",
-      temperature: 0.3,
+      name: "Illustrated Explainer Storyboard Artist",
+      task: "storyboard",
+      temperature: 0.2,
     },
     input,
   );
