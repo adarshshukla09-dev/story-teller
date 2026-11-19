@@ -2,7 +2,7 @@ import {
   FactCheckGenerationSchema,
   FactCheckResultSchema,
   type FactCheckResultOutput,
-} from "../schema/factCheck.schema.js";
+} from "../schema/fact.schema.js";
 
 import { runStructuredAgent } from "./base.agent.js";
 

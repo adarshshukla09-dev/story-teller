@@ -1,11 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 import { productionGraph } from "./graphs/workflow.graph.js";
 import { createProductionJson } from "./agents/createProductionJson.js";
 
 async function writeJsonAtomically(filePath: string, value: unknown): Promise<void> {
-  const tempPath = `${filePath}.tmp`;
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await fs.writeFile(tempPath, JSON.stringify(value, null, 2), "utf-8");
   await fs.rename(tempPath, filePath);
 }
@@ -61,13 +63,18 @@ async function generateExplainer(topic: string) {
       savedAt: new Date().toISOString(),
       state: latestState ?? { topic },
     };
-    await writeJsonAtomically(path.join(outputDir, `${slug}.failed.json`), failure);
-    await fs.writeFile(
-      path.join(outputDir, `${slug}.failed.md`),
-      `# Production run failed\n\n${failure.error}\n\nLatest workflow state is saved in \`${slug}.failed.json\`.`,
-      "utf-8",
-    );
-    console.error(`Production failed; latest progress saved to ${path.join(outputDir, `${slug}.failed.json`)}`);
+    try {
+      await fs.mkdir(outputDir, { recursive: true });
+      await writeJsonAtomically(path.join(outputDir, `${slug}.failed.json`), failure);
+      await fs.writeFile(
+        path.join(outputDir, `${slug}.failed.md`),
+        `# Production run failed\n\n${failure.error}\n\nLatest workflow state is saved in \`${slug}.failed.json\`.`,
+        "utf-8",
+      );
+      console.error(`Production failed; latest progress saved to ${path.join(outputDir, `${slug}.failed.json`)}`);
+    } catch (saveError) {
+      console.error(`Could not save failure progress: ${String(saveError)}`);
+    }
     throw error;
   }
 }

@@ -25,17 +25,17 @@ Do not invent a new metaphor, rewrite narration, or alter canonical character de
 
 ## 2. Canvas Architecture & Safe Zones
 
-Return artwork only in the pipeline's **1080×1130 viewBox** (`0 0 1080 1130`). The renderer places this artwork into the central band of the final 1080×1920 card and adds the exact title and caption as SVG text.
+Return artwork only in the pipeline's **1080×637 viewBox** (`0 0 1080 637`). The renderer places this artwork into the 15–74% middle band of the final 1080×1080 square card and adds the exact title and caption in the top and bottom bands.
 
 | Zone                  | Vertical Range (`Y`)    | Rule                                                             |
 | :-------------------- | :---------------------- | :--------------------------------------------------------------- |
-| **Header Safe Zone**  | `0 – 269` (0–14% of final card)       | Not part of the artwork SVG.            |
-| **Artwork Zone**      | `288 – 1420` (15–74% of final card)   | Fill the artwork viewBox with the scene. |
-| **Caption Safe Zone** | `1440 – 1920` (75–100% of final card) | Not part of the artwork SVG.            |
+| **Header Safe Zone**  | `0 – 151` (0–14% of final square card) | Not part of the artwork SVG.            |
+| **Artwork Zone**      | `162 – 799` (15–74% of final card)     | Fill the 1080×637 artwork viewBox.       |
+| **Caption Safe Zone** | `810 – 1080` (75–100% of final card)   | Not part of the artwork SVG.            |
 
 - **Horizontal Margins:** Keep a minimum `48px` margin (`x = 48` to `1032`) for all focal faces, hands, and key props.
-- **No Square Letterboxing:** Compose directly for the 1080×1130 artwork viewBox. Do not add the header or caption bands.
-- **Programmatic Text Rule:** Never draw titles, bottom captions, labels, or legible text in this artwork asset. The final card renderer composes all typography from the canonical storyboard fields.
+- **No Letterboxing:** Compose directly for the 1080×637 artwork viewBox. Do not add the header or caption bands to this central artwork asset.
+- **No Middle Text:** Never draw titles, bottom captions, labels, speech bubbles, pseudo-writing, or faded/ghosted text in the central artwork. The final square card renderer places only the exact title above and caption below the artwork.
 
 ---
 
@@ -93,9 +93,9 @@ Follow the Production Bible's character design. Even for minimalist "stickman" p
 
 ## 6. Technical SVG Engineering Rules
 
-- **Root Tag:** `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1130" viewBox="0 0 1080 1130">`.
+- **Root Tag:** `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="637" viewBox="0 0 1080 637">`.
 - **Self-Contained & Valid XML:** No external fonts, images, `<script>`, `<foreignObject>`, event handlers, or unescaped XML characters (`&`, `<`, `>`).
-- **Reuse & Transforms:** Group repeated shapes with `<g>` and keep `transform="translate(...) rotate(...)"` clean. Use only the approved SVG element subset; keep artwork coordinates inside `x: [48, 1032]` and `y: [24, 1106]` in the local artwork viewBox.
+- **Reuse & Transforms:** Group repeated shapes with `<g>` and keep `transform="translate(...) rotate(...)"` clean. Use only the approved SVG element subset; keep artwork coordinates inside `x: [48, 1032]` and `y: [24, 613]` in the local artwork viewBox.
 
 ---
 
@@ -106,7 +106,7 @@ Return **raw valid JSON only** (no Markdown code fences, no commentary) matching
 ```json
 {
   "sceneId": 1,
-  "svgCode": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1080\" height=\"1130\" viewBox=\"0 0 1080 1130\">...</svg>",
+  "svgCode": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1080\" height=\"637\" viewBox=\"0 0 1080 637\">...</svg>",
   "artworkDescription": "Concise factual summary of the drawn scene, character pose, props, and environment.",
   "textOverlays": {
     "header": null,

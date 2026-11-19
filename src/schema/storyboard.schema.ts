@@ -4,7 +4,7 @@ export interface Storyboard {
   videoTitle: string;
   oneIdea: string;
   videoStyle: string;
-  aspectRatio: "9:16";
+  aspectRatio: "1:1";
   timingMode: string;
   sourceNarrationFingerprint?: string | null;
   cardTemplate: {

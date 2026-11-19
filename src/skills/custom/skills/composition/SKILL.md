@@ -260,7 +260,7 @@ Generated artwork must contain no:
 - Watermarks.
 - Pseudo-text.
 
-Put required diagram labels in `programmaticOverlays.diagramLabels` as exact uppercase strings.
+Put required diagram labels in `programmaticOverlays.diagramLabels` as exact uppercase strings. The image prompt also requests the exact video title in the top band and current-scene caption in the bottom band; keep these zones clear of the central illustration.
 
 Prefer an illustration that communicates without labels.
 
@@ -327,7 +327,7 @@ Before returning the storyboard:
 7. Are all characters and props approved?
 8. Is the aha scene visually clear without forcing a cutaway?
 9. Are composition types canonical?
-10. Are all text overlays programmatic?
+10. Does the layout reserve distinct top-title, middle-artwork, and bottom-caption bands, and are exact title/caption strings available to the image prompt and overlay metadata?
 11. Are timing values provisional estimates?
 12. Are all canonical scene fields present?
 

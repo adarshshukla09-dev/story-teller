@@ -35,7 +35,7 @@ Choose the engine based on the viewer's confusion, not the topic label. Combine 
 | Myth / misconception | What part of the common explanation is wrong? | Health myths, science misconceptions, popular history |
 | Conceptual distinction | What is the difference between two easily confused ideas? | Class vs object, virus vs bacteria, voltage vs current |
 
-Do not force a paradox, villain, protagonist, analogy, or dramatic twist when the subject does not contain one. For history, chronology must explain causation rather than become a list of dates. For medicine, the human experience can create stakes, but do not invent a patient or imply diagnosis/treatment advice. For engineering and computer science, the system itself can be the protagonist if that is clearer than a fictional person.
+Do not force a paradox, villain, protagonist, analogy, or dramatic twist when the subject does not contain one. For history, chronology must explain causation rather than become a list of dates. For medicine, the human experience can create stakes, but do not invent a patient or imply diagnosis/treatment advice. For engineering and computer science, the system itself can be the protagonist if that is clearer than a fictional person. A clearly labeled illustrative scenario may be invented to make an abstract mechanism concrete; never present it as a real event, sourced anecdote, quotation, statistic, or evidence. Choose the strongest truthful approach for the topic, which may be an observed situation, historical event, thought experiment, contradiction, or direct mechanism.
 
 ## 3. Build a causal explanation
 Before beats, write:
@@ -57,7 +57,7 @@ Use the lightest device that makes the idea clearer:
 - **Model or diagram:** use for invisible systems, flows, scale, feedback loops, networks, and spatial relationships.
 - **Timeline / map:** use for history, discovery, migration, conflict, and change over time.
 - **Comparison:** use for alternatives, before/after states, normal/abnormal cases, or competing explanations. Keep baselines and units comparable.
-- **Human story:** use when a real, sourced person's choices or experience materially explain the subject. Do not fabricate quotations, thoughts, scenes, or motivations.
+- **Human story or illustrative scenario:** use a sourced person's experience only when supported by evidence. A fictional scenario is allowed when explicitly framed as illustrative and when it clarifies the mechanism; do not fabricate quotations, private thoughts, motives, or events and present them as factual.
 
 Do not add an analogy merely to make the film feel cinematic. A precise direct explanation is better than a memorable but misleading metaphor.
 
@@ -109,14 +109,14 @@ This is a guide, not a mandatory eight-beat template. Merge, expand, reorder, or
 ## 7. Visual storytelling
 - Each scene has one primary visual claim.
 - Show change, interaction, scale, sequence, or causal connection—not generic decorative imagery.
-- Use labels only when they disambiguate; keep generated artwork text-free and render typography programmatically.
+- Use labels only when they disambiguate. Every full-card image has the exact video title at the top and the exact scene key phrase at the bottom; prohibit other text in the illustration.
 - Keep visual continuity only where it helps. Reuse a character or object when it carries the viewer through the explanation; otherwise use the visual form that best explains the subject.
 - A diagram is not self-explanatory: show what its arrows, boundaries, colors, and groupings mean.
 - Never imply causation through visual sequence alone unless the causal link is supported.
 - The visual must not claim more certainty, scale, danger, or simplicity than the evidence supports.
 
 ## 8. Emotional engagement without fabrication
-Use real stakes: time, cost, risk, uncertainty, human consequence, engineering failure, historical choice, or the surprise of a result. Emotional tone should emerge from the subject. Avoid generic “imagine your life…” setups, fake urgency, invented patient stories presented as real, and melodrama.
+Use real stakes: time, cost, risk, uncertainty, human consequence, engineering failure, historical choice, or the surprise of a result. Emotional tone should emerge from the subject. A concrete fictional example may carry the viewer through a mechanism if it is unmistakably illustrative and does not imply evidence. Avoid fake urgency, invented patient stories presented as real, and melodrama.
 
 ## 9. Accuracy and sourcing
 Create a claim ledger for every factual claim that matters to the explanation. Record:

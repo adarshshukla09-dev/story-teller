@@ -70,6 +70,11 @@ export function normalizeScript(input: Script): Script {
         `Script beat ${beatId} must have a positive estimatedDurationSeconds.`,
       );
     }
+    if (duration < 3 || duration > 4) {
+      throw new Error(
+        `Script beat ${beatId} estimatedDurationSeconds must be 3–4 seconds (received ${duration}).`,
+      );
+    }
     const wordCount = (
       beat.narration.match(/[A-Za-z0-9]+(?:['’\\-][A-Za-z0-9]+)*/g) ?? []
     ).length;
@@ -91,6 +96,11 @@ export function normalizeScript(input: Script): Script {
       .reduce((sum, beat) => sum + beat.estimatedDurationSeconds, 0)
       .toFixed(2),
   );
+  if (durationSumCheck < 50 || durationSumCheck > 52) {
+    throw new Error(
+      `Script estimated runtime must total 50–52 seconds (received ${durationSumCheck}s).`,
+    );
+  }
   return {
     ...input,
     beats,

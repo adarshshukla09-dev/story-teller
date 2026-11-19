@@ -7,13 +7,13 @@ This skill participates in one production pipeline. Apply the shared documents b
 - `src/skills/custom/skills/QUALITY_RUBRIC.md` — creative scoring and release gates.
 - `src/skills/custom/skills/REVISION_PROTOCOL.md` — targeted revision and stale-artifact rules.
 
-Global invariants: minimalist illustrated documentary explainer; vertical 9:16; text-free generated artwork; programmatic typography/overlays; one visual idea per scene; factual claims traceable to sources; no unsupported visual invention. Technical validity and creative quality are separate decisions.
+Global invariants: richly colored hand-drawn comic explainer; square 1:1 (4:4); exact title at top and current-scene narration key phrase at bottom; one clear visual idea per scene; factual claims traceable to sources; no unsupported visual invention. Technical validity and creative quality are separate decisions.
 
 ---
 
 ---
 name: reference-video-style
-description: Shared visual style, pacing contract, and visual grammar for minimalist illustrated documentary explainer videos.
+description: Shared visual style, pacing contract, and visual grammar for richly colored illustrated comic explainer cards.
 ---
 
 # Reference Video Style & Pacing Contract
@@ -22,17 +22,17 @@ description: Shared visual style, pacing contract, and visual grammar for minima
 
 Reproduce the signature visual language and high-retention pacing of the reference explainer format, regardless of topic. While the script adapts to any subject, the visual system, card architecture, and editorial rhythm must remain unmistakably consistent from frame 1 to the final cut.
 
-This is a **minimalist illustrated documentary presented as a sequence of designed visual cards**—never live-action, cinematic 3D, a slideshow of stock imagery, or disconnected floating icons.
+This is a **hand-drawn illustrated documentary presented as a sequence of square colorful comic cards**—never live-action, cinematic 3D, a slideshow of stock imagery, or disconnected floating icons. Build a complete 1:1 card in every image: consistent video title at the top, expressive colored scene in the middle, and a short narration phrase at the bottom.
 
 ---
 
 ## 1. Canvas & Card Layout
 
-- **Aspect Ratio & Resolution:** Vertical `9:16` (`1080 × 1920`).
-- **Framing:** A full-frame warm cream (`#FDFBF7`) 9:16 canvas. Do not add a black letterbox frame. Keep the same canvas and three-band card template in every scene.
+- **Aspect Ratio & Resolution:** Square `1:1` (`1080 × 1080`, also described as 4:4).
+- **Framing:** A full-frame illustrated 1:1 canvas. Do not add a black letterbox frame. Keep the same canvas and three-band card template in every scene.
 - **Internal Card Zones (Strict Separation):**
   1. **Header Band (Top):** Recurring short video title, centered and identically positioned on every card.
-  2. **Artwork Zone (Middle):** Dominant central region holding the minimalist 2D illustration. Keep clear breathing room around the edges.
+  2. **Artwork Zone (Middle):** Dominant central region holding a detailed but uncluttered, fully colored 2D comic illustration with a clear setting and foreground/background depth.
   3. **Caption Band (Bottom):** Bold, high-contrast 1–2 line summary caption with selective red emphasis.
 
 ---
@@ -47,13 +47,13 @@ This is a **minimalist illustrated documentary presented as a sequence of design
 
 ## 3. Central Illustration Style
 
-- **Line & Form:** Minimalist hand-drawn 2D editorial ink illustration. Thin-to-medium consistent black outlines (`#1A1A1A`), slightly organic and human—never sterile vector geometry.
+- **Line & Form:** Hand-drawn 2D comic illustration with confident, rounded black outlines (`#1A1A1A`), expressive shapes, and enough environmental detail to make each scene feel like a place—not a sparse icon or stick figure floating on white.
 - **Characters:** Simple stick-figure or ultra-simplified human characters with round heads, minimal dot/line facial features, and expressive posture, gestures, and spatial distance. Reuse the exact same character designs and proportions across all scenes.
 - **Color Palette:**
   - Card/background: Warm cream (`#FDFBF7`).
-  - Fills: Flat, muted earthy tones—sage greens, dusty blues, warm browns, soft ochre/yellow, and light warm grays. Restrained soft drop-shadows only where needed for depth.
+  - Fills: Warm, vivid, coordinated colors—earthy paths and buildings, green landscapes, blue skies, warm sunlight, and character/prop colors defined by the Production Bible. Use flat illustrated fills with restrained shading to give the scene depth.
   - Accent: Crimson/editorial red (`#E63946`) reserved strictly for meaningful focal highlights (e.g., a key trend line, warning indicator, or critical object) and caption emphasis.
-- **Zero Embedded Text:** The illustration generator must **never** render text, numbers, or labels inside the artwork. Any chart labels or year markers are specified as `programmaticOverlays` and rendered cleanly in code.
+- **Approved Card Text:** The image generator must render the exact canonical video title in the top band and the exact scene caption in the bottom band. Do not generate any other words, numbers, labels, logos, or pseudo-text except exact diagram labels approved in `programmaticOverlays`.
 
 ---
 
@@ -61,7 +61,7 @@ This is a **minimalist illustrated documentary presented as a sequence of design
 
 Every card communicates **one clear visual idea** that advances the argument. Do not decorate empty space with filler objects; every visual element must explain, compare, or prove a point in the narration.
 
-**Allowed 9:16-Friendly Composition Patterns:**
+**Allowed Square-Friendly Composition Patterns:**
 
 - **Character + Environment/Prop:** Protagonist interacting with a specific object, screen, or obstacle.
 - **Top-and-Bottom Comparison:** Horizontal divider separating two states (e.g., _Expectation vs. Reality_, _1820 vs. Today_)—**never** cramped left/right vertical split-screens.
@@ -99,7 +99,7 @@ The bottom caption is the rhythmic punchline of each card—not a subtitle trans
 
 ## 6. Unified Pacing & Visual Momentum Contract
 
-- **Target Runtime & Card Count:** Aim for **50–52 seconds** across **14–16 distinct visual cards**, with each card held for **3–4 seconds**. Prefer 14 cards averaging about 3.6 seconds when the explanation supports that structure.
+- **Target Runtime & Card Count:** Aim for **50–52 seconds** across **14–16 distinct visual cards**, with each card held for **3–4 seconds**. Check the total and every individual duration before approval; never shorten one card below 3 seconds to force the total into range.
 - **Maximum Hold Rule:** Never hold one static illustration for longer than **4 seconds**.
 - **Setup-and-Payoff Splitting:** When a narration sentence contains a setup and an ironic twist, contrast, or reveal, split it across consecutive cards only when each card still communicates a complete, useful visual beat within 3–4 seconds.
 - **Runtime Integrity:** The sum of estimated scene durations must reach at least 50 seconds and stay near the 50-second target. Do not pad with repeated narration or split a thought into empty cards to reach the count; narrow the topic or report that the scope cannot fit honestly.
@@ -118,16 +118,13 @@ The bottom caption is the rhythmic punchline of each card—not a subtitle trans
   - AI-generated gibberish text inside artwork.
   - Flashy wipes, spins, bounce animations, or kinetic typography clutter.
 
-## 8. Text and image separation
+## 8. Full-card prompt text
 
-Recommended reliable production approach:
-
-- Generate only the central illustration artwork.
-- Add title and caption in the Renderer using SVG, HTML canvas or another deterministic text renderer.
-- Keep an explicit layout contract: `header`, `artwork`, `caption`.
-- Preserve the caption's exact text and red-emphasis spans from the storyboard.
-- If labels are essential inside a diagram, add them programmatically too.
-- Never let generated image text replace the canonical caption.
+- Request a complete full-frame card with three explicit bands: title at top, rich comic illustration in the middle, narration key phrase at bottom.
+- Quote the exact video title and exact approved caption text in the prompt. Preserve capitalization and punctuation; never paraphrase or shorten them.
+- Keep title and caption readable and separated from the illustration. Use bold rounded black lettering for the title and caption, with only the approved `redEmphasis` phrase in red.
+- Keep the exact title and caption in overlay metadata for validation. If a downstream renderer receives a card image with text already rendered, it must not draw the title or caption again.
+- For diagrams, use only exact approved diagram labels; never invent incidental sign or screen text.
 
 ## 9. Negative style constraints
 
@@ -165,7 +162,6 @@ If a project productionBible explicitly defines a different approved palette, th
 wins consistently across every visual stage. Never mix palette variants within one film.
 
 
-## Canonical 9:16 safe-zone geometry
-Use the full 1080×1920 canvas: header Y 0–14%, artwork Y 15–74%, caption Y 75–100%.
-The warm cream background continues through all three bands. Only the central band contains generated
-artwork. The header/caption text is added programmatically. Do not introduce black letterbox bands.
+## Canonical 1:1 safe-zone geometry
+Use the full 1080×1080 canvas: header Y 0–14%, artwork Y 15–74%, caption Y 75–100%.
+The approved warm background continues through all three bands. The title and caption are requested in the full-card image prompt; keep the central illustration in the middle band. Do not introduce black letterbox bands.

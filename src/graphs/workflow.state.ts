@@ -1,5 +1,5 @@
 import { Annotation } from "@langchain/langgraph";
-import type { FactCheckResultOutput } from "../schema/factCheck.schema.js";
+import type { FactCheckResultOutput } from "../schema/fact.schema.js";
 
 /* =========================================
    FACT-CHECK TYPES
@@ -12,10 +12,21 @@ export type FactCheckVerdict =
   | "disputed"
   | "misleading"
   | "unverifiable";
-
+export interface SceneImageTask {
+  sceneId: number;
+  prompt: string;
+  negativePrompt?: string;
+}
 export type IssueSeverity = "blocking" | "major" | "minor";
 
 export type FactCheckResult = FactCheckResultOutput;
+
+export interface GeneratedSceneImage {
+  sceneId: number;
+  imageUrl?: string;
+  base64?: string;
+  mimeType?: string;
+}
 
 /* =========================================
    PRODUCTION STATE
@@ -58,6 +69,7 @@ export const ProductionState = Annotation.Root({
     value: (_current, update) => update,
     default: () => 0,
   }),
+
   visualRevisionCount: Annotation<number>({
     value: (_, update) => update,
     default: () => 0,
@@ -68,17 +80,20 @@ export const ProductionState = Annotation.Root({
     default: () => [],
   }),
 
-  svgValidationIssues: Annotation<string[]>({
+  imageValidationIssues: Annotation<string[]>({
     value: (_, update) => update,
     default: () => [],
   }),
+
   // =======================================
   // EXPLANATION PLANNING
   // =======================================
+
   visualQaIssues: Annotation<string[]>({
     value: (_, update) => update,
     default: () => [],
   }),
+
   explanationStrategy: Annotation<string>(),
 
   // =======================================
@@ -120,8 +135,14 @@ export const ProductionState = Annotation.Root({
   continuity: Annotation<string>(),
 
   visualPrompts: Annotation<string>(),
-
-  svgIllustrations: Annotation<string>(),
+  generatedImagePrompts: Annotation<SceneImageTask[]>({
+    value: (_, update) => update,
+    default: () => [],
+  }),
+  generatedImages: Annotation<GeneratedSceneImage[]>({
+    value: (_current, update) => update,
+    default: () => [],
+  }),
 
   artDirection: Annotation<string>(),
 
@@ -147,7 +168,19 @@ export const ProductionState = Annotation.Root({
   // =======================================
   // ERROR TRACKING
   // =======================================
+  // =======================================
+  // SEQUENTIAL IMAGE GENERATION
+  // =======================================
 
+  sceneImageQueue: Annotation<SceneImageTask[]>({
+    value: (_, update) => update,
+    default: () => [],
+  }),
+
+  sceneImageIndex: Annotation<number>({
+    value: (_, update) => update,
+    default: () => 0,
+  }),
   errors: Annotation<string[]>({
     value: (current, update) => [...current, ...update],
     default: () => [],

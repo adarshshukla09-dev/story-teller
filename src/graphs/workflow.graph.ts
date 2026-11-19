@@ -1,5 +1,6 @@
 import { StateGraph, END } from "@langchain/langgraph";
 import { ProductionState } from "./workflow.state.js";
+
 import {
   comprehensionNode,
   researchNode,
@@ -8,19 +9,24 @@ import {
   strategyNode,
   directorNode,
   scriptwriterNode,
+  imageNode,
   qaNode,
   storyboardNode,
   compositionNode,
   continuityNode,
   visualDirectorNode,
-  svgIllustratorNode,
   finalQaNode,
   finalOutputNode,
   qaRouter,
+  prepareSceneImagesNode,
+  imageGenerationRouter,
 } from "./workflow.node.js";
 
 function finalQaRouter(state: typeof ProductionState.State) {
-  if (state.finalQaStatus === "approved") return "finalOutputAgent";
+  if (state.finalQaStatus === "approved") {
+    return "finalOutputAgent";
+  }
+
   throw new Error(
     `Final production QA did not approve the package. Feedback: ${state.finalQaFeedback}`,
   );
@@ -28,7 +34,11 @@ function finalQaRouter(state: typeof ProductionState.State) {
 
 export function createProductionGraph() {
   const workflow = new StateGraph(ProductionState)
-    // Add nodes
+
+    // =======================================
+    // REGISTER NODES
+    // =======================================
+
     .addNode("comprehensionAgent", comprehensionNode)
     .addNode("researchAgent", researchNode)
     .addNode("factCheckAgent", factCheckNode)
@@ -36,41 +46,83 @@ export function createProductionGraph() {
     .addNode("directorAgent", directorNode)
     .addNode("scriptwriterAgent", scriptwriterNode)
     .addNode("qaAgent", qaNode)
+
     .addNode("storyboardAgent", storyboardNode)
     .addNode("compositionAgent", compositionNode)
     .addNode("continuityAgent", continuityNode)
     .addNode("visualDirectorAgent", visualDirectorNode)
-    .addNode("svgIllustratorAgent", svgIllustratorNode)
+
+    // Sequential image generation nodes
+    .addNode("prepareSceneImages", prepareSceneImagesNode)
+    .addNode("generateSceneImage", imageNode)
+
     .addNode("finalQaAgent", finalQaNode)
     .addNode("finalOutputAgent", finalOutputNode)
 
-    // Define edges and conditional routing
+    // =======================================
+    // INITIAL WORKFLOW
+    // =======================================
+
     .addEdge("__start__", "comprehensionAgent")
+
     .addEdge("comprehensionAgent", "researchAgent")
+
     .addEdge("researchAgent", "factCheckAgent")
 
-    // Conditional fact-check routing using factCheckRouter
+    // =======================================
+    // FACT CHECK ROUTING
+    // =======================================
+
     .addConditionalEdges("factCheckAgent", factCheckRouter, {
       strategy: "strategyAgent",
     })
 
+    // =======================================
+    // SCRIPT GENERATION
+    // =======================================
+
     .addEdge("strategyAgent", "directorAgent")
+
     .addEdge("directorAgent", "scriptwriterAgent")
+
     .addEdge("scriptwriterAgent", "qaAgent")
 
-    // Script QA conditional retry/approval loop
+    // =======================================
+    // SCRIPT QA LOOP
+    // =======================================
+
     .addConditionalEdges("qaAgent", qaRouter, {
       scriptwriterAgent: "scriptwriterAgent",
       storyboardAgent: "storyboardAgent",
     })
 
-    .addEdge("storyboardAgent", "compositionAgent")
-    .addEdge("compositionAgent", "continuityAgent")
-    .addEdge("continuityAgent", "visualDirectorAgent")
-    .addEdge("visualDirectorAgent", "svgIllustratorAgent")
-    .addEdge("svgIllustratorAgent", "finalQaAgent")
+    // =======================================
+    // VISUAL PRODUCTION
+    // =======================================
 
-    // Final QA conditional routing
+    .addEdge("storyboardAgent", "compositionAgent")
+
+    .addEdge("compositionAgent", "continuityAgent")
+
+    .addEdge("continuityAgent", "visualDirectorAgent")
+
+    // =======================================
+    // SEQUENTIAL IMAGE GENERATION
+    // =======================================
+
+    .addEdge("visualDirectorAgent", "prepareSceneImages")
+
+    .addEdge("prepareSceneImages", "generateSceneImage")
+
+    .addConditionalEdges("generateSceneImage", imageGenerationRouter, {
+      generateSceneImage: "generateSceneImage",
+      finalQaAgent: "finalQaAgent",
+    })
+
+    // =======================================
+    // FINAL QA
+    // =======================================
+
     .addConditionalEdges("finalQaAgent", finalQaRouter, {
       finalOutputAgent: "finalOutputAgent",
     })
