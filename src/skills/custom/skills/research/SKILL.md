@@ -95,9 +95,13 @@ A large dossier is not necessarily complete. Prioritize information necessary fo
 
 Return valid JSON only.
 
+Select one named `coreConcept` that the entire explainer will teach. Also return `relatedConceptsExcluded`, an array of adjacent named theories/effects/paradoxes intentionally excluded from the script. Keep the research dossier broad enough for evidence checking, but clearly distinguish supporting plain-language mechanisms from separate concepts. Add these two fields to the root output object.
+
 {
 "status": "complete | incomplete",
 "topic": "",
+"coreConcept": "",
+"relatedConceptsExcluded": [],
 "topicOverview": {
 "centralIdea": "",
 "importance": "",

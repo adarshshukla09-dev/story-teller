@@ -49,6 +49,7 @@ Every issue must identify:
 
 Do not request a story rewrite or a new visual concept as a QA correction. If the source storyboard or composition itself is contradictory, identify that upstream conflict instead of blaming the generated image for following it.
 Approval logic
+When a `coreConcept` is supplied, verify that narration and storyboard stay focused on it and do not introduce a second named theory, paradox, effect, or law. Report any drift as a concrete, actionable issue using the existing issue contract.
 
     Return approved only when every required scene has been inspected and all required checks pass.
     Return revision_required when one or more required checks fail or a required image is missing or uninspectable.

@@ -135,8 +135,8 @@ export async function createProductionJson(
   if (!Array.isArray(beats) || beats.length === 0) {
     throw new Error("script must contain a non-empty beats array (or legacy script array).");
   }
-  if (beats.length < 14 || beats.length > 16) {
-    throw new Error(`The final card package requires 14–16 scenes (received ${beats.length}).`);
+  if (beats.length < 12 || beats.length > 16) {
+    throw new Error(`The final card package requires 12–16 scenes (received ${beats.length}).`);
   }
 
   const storyboard = parseJson<{ videoTitle?: string; scenes?: any[] }>(root.storyboard, "storyboard");
@@ -202,12 +202,11 @@ export async function createProductionJson(
     const imagePrompt = promptByScene.get(sceneNo);
     if (!imagePrompt?.prompt?.trim()) throw new Error(`Scene ${sceneNo} is missing its image-generation prompt.`);
 
-    const duration = Number(resolveDurationSeconds(beat, storyboardScene).toFixed(1));
-    const legacyRange = beat.estimatedDurationSeconds === undefined && Boolean(beat.time);
-    const minDuration = legacyRange ? 0.5 : 3;
-    const maxDuration = legacyRange ? 10 : 4;
-    if (!Number.isFinite(duration) || duration < minDuration || duration > maxDuration) {
-      throw new Error(`Scene ${sceneNo} duration must be ${minDuration}–${maxDuration} seconds (received ${beat.estimatedDurationSeconds ?? beat.time ?? "missing"}).`);
+    const narrationWords = (beat.narration.match(/[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*/g) ?? []).length;
+    // Runtime comes from spoken copy. Reserve a short transition pause after each card.
+    const duration = Number((narrationWords / 2.7 + (index < beats.length - 1 ? 0.15 : 0)).toFixed(1));
+    if (!Number.isFinite(duration) || duration <= 0) {
+      throw new Error(`Scene ${sceneNo} narration produced an invalid computed duration (${duration}).`);
     }
 
     const startTime = Number(currentTime.toFixed(1));
@@ -233,8 +232,8 @@ export async function createProductionJson(
     });
   }
 
-  if (currentTime < 50 || currentTime > 52) {
-    throw new Error(`Estimated runtime must be 50–52 seconds (received ${currentTime.toFixed(1)}s).`);
+  if (currentTime < 45 || currentTime > 75) {
+    throw new Error(`Estimated runtime must be 45–75 seconds (received ${currentTime.toFixed(1)}s).`);
   }
 
   const generatedCount = scenes.filter((scene) => scene.imageGenerated).length;

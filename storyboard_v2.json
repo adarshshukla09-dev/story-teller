@@ -1,0 +1,827 @@
+{
+  "projectTitle": "The Paradox of Progress",
+  "aspectRatio": "1:1",
+  "resolution": {
+    "width": 1080,
+    "height": 1080
+  },
+  "estimatedTotalDuration": 67,
+  "assetStatus": "prompts_ready_images_not_generated",
+  "scenes": [
+    {
+      "sceneNo": 1,
+      "narration": "Imagine a guy visiting his grandfather in the village.",
+      "startTime": 0,
+      "endTime": 3,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The young grandson arrives on a dusty village path and greets his grandfather, an elderly thin stick figure with a simple cane. Earth-tone accents. Use village earth tones (#C58B55) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE VILLAGE; Bottom Caption: A grandson visits his grandfather in the village.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandfather with simple cane",
+        "Grandson with consistent cool-blue hoodie",
+        "The young grandson arrives on a dusty village path and greets his grandfather, an elderly thin stick figure with a simple cane"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE VILLAGE",
+        "captionLine1": "A grandson visits his grandfather in the village.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 1,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE VILLAGE"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The young grandson arrives on a dusty village path and greets his grandfather, an elderly thin stick figure with a simple cane. Earth-tone accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "A grandson visits his grandfather in the village."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_01.png"
+    },
+    {
+      "sceneNo": 2,
+      "narration": "His grandfather grew up with no electricity, walked 5 kilometers to school, and sometimes went to bed hungry.",
+      "startTime": 3,
+      "endTime": 8,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandfather walks a long rural path toward a small school in the distance, carrying a book and leaning on his cane; a modest village home sits behind him. Earth-tone accents. Use village earth tones (#C58B55) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE VILLAGE; Bottom Caption: No electricity. Five kilometers. Sometimes hungry.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandfather with simple cane",
+        "The grandfather walks a long rural path toward a small school in the distance, carrying a book and leaning on his cane; a modest village home sits behind him"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE VILLAGE",
+        "captionLine1": "No electricity. Five kilometers. Sometimes hungry.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 2,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE VILLAGE"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandfather walks a long rural path toward a small school in the distance, carrying a book and leaning on his cane; a modest village home sits behind him. Earth-tone accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "No electricity. Five kilometers. Sometimes hungry."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_02.png"
+    },
+    {
+      "sceneNo": 3,
+      "narration": "The grandson has air conditioning, a phone that can order any food in 20 minutes, and more entertainment than anyone in history.",
+      "startTime": 8,
+      "endTime": 13,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The same young grandson sits in a cool modern room beside a phone showing simple food icons and entertainment thumbnails without lettering. Cool blue accents. Use cool modern blues (#6FA8D6) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE GRANDSON; Bottom Caption: Air conditioning, quick food, endless entertainment.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandson with consistent cool-blue hoodie",
+        "The same young grandson sits in a cool modern room beside a phone showing simple food icons and entertainment thumbnails without lettering"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE GRANDSON",
+        "captionLine1": "Air conditioning, quick food, endless entertainment.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 3,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE GRANDSON"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The same young grandson sits in a cool modern room beside a phone showing simple food icons and entertainment thumbnails without lettering. Cool blue accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "Air conditioning, quick food, endless entertainment."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_03.png"
+    },
+    {
+      "sceneNo": 4,
+      "narration": "Yet he is the one who cannot sleep at night, who feels anxious, behind, and never quite satisfied.",
+      "startTime": 13,
+      "endTime": 18,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandson lies awake in bed under an air conditioner, phone glow nearby; a small red heart meter is low at about one-third. Cool blue accents. Use cool modern blues (#6FA8D6) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE RESTLESS NIGHT; Bottom Caption: Anxious, behind, and never quite satisfied.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandson with consistent cool-blue hoodie",
+        "The grandson lies awake in bed under an air conditioner, phone glow nearby; a small red heart meter is low at about one-third"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE RESTLESS NIGHT",
+        "captionLine1": "Anxious, behind, and never quite satisfied.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 4,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE RESTLESS NIGHT"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandson lies awake in bed under an air conditioner, phone glow nearby; a small red heart meter is low at about one-third. Cool blue accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "Anxious, behind, and never quite satisfied."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_04.png"
+    },
+    {
+      "sceneNo": 5,
+      "narration": "His grandfather looks at him and says, We had nothing, and we were somehow happier. This is the paradox of progress.",
+      "startTime": 18,
+      "endTime": 23,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandfather with cane and grandson face one another across a village doorway; grandfather is calm, grandson looks puzzled. Earth-tone village meets a small cool-blue modern accent. Use village earth tones (#C58B55) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE PARADOX; Bottom Caption: We had nothing, and were somehow happier.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandfather with simple cane",
+        "Grandson with consistent cool-blue hoodie",
+        "The grandfather with cane and grandson face one another across a village doorway; grandfather is calm, grandson looks puzzled"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE PARADOX",
+        "captionLine1": "We had nothing, and were somehow happier.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 5,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE PARADOX"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandfather with cane and grandson face one another across a village doorway; grandfather is calm, grandson looks puzzled. Earth-tone village meets a small cool-blue modern accent."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "We had nothing, and were somehow happier."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_05.png"
+    },
+    {
+      "sceneNo": 6,
+      "narration": "Life keeps getting better on paper, but people do not feel much better at all.",
+      "startTime": 23,
+      "endTime": 26,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandfather and grandson stand beside a gently rising stack of comforts while the grandson’s content expression remains unchanged; visual contrast only, no text or graph labels. Use cool modern blues (#6FA8D6) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE THESIS; Bottom Caption: Better on paper, not in feeling.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandfather with simple cane",
+        "Grandson with consistent cool-blue hoodie",
+        "The grandfather and grandson stand beside a gently rising stack of comforts while the grandson’s content expression remains unchanged; visual contrast only, no text or graph labels"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE THESIS",
+        "captionLine1": "Better on paper, not in feeling.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 6,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE THESIS"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandfather and grandson stand beside a gently rising stack of comforts while the grandson’s content expression remains unchanged; visual contrast only, no text or graph labels."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "Better on paper, not in feeling."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_06.png"
+    },
+    {
+      "sceneNo": 7,
+      "narration": "In 1974, economist Richard Easterlin noticed that as countries got richer over decades, their average happiness barely rose.",
+      "startTime": 26,
+      "endTime": 33,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandson studies an unlabeled line graph: prosperity line rises while a second line stays nearly flat; a small world map silhouette sits beside the graph. Cool blue accents. Use cool modern blues (#6FA8D6) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE EASTERLIN PUZZLE; Bottom Caption: Richer countries; average happiness barely rose.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandson with consistent cool-blue hoodie",
+        "The grandson studies an unlabeled line graph: prosperity line rises while a second line stays nearly flat; a small world map silhouette sits beside the graph"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE EASTERLIN PUZZLE",
+        "captionLine1": "Richer countries; average happiness barely rose.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 7,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE EASTERLIN PUZZLE"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandson studies an unlabeled line graph: prosperity line rises while a second line stays nearly flat; a small world map silhouette sits beside the graph. Cool blue accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "Richer countries; average happiness barely rose."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_07.png"
+    },
+    {
+      "sceneNo": 8,
+      "narration": "Later researchers argued about how strong that pattern really is, but the puzzle has never gone away.",
+      "startTime": 33,
+      "endTime": 38,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. Two small researcher stick figures examine the same unlabeled flat happiness line from different angles, one leaning in and one gesturing thoughtfully; the grandson watches. Cool blue accents. Use cool modern blues (#6FA8D6) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE EASTERLIN PUZZLE; Bottom Caption: Researchers still debate the pattern’s strength.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandson with consistent cool-blue hoodie",
+        "Two small researcher stick figures examine the same unlabeled flat happiness line from different angles, one leaning in and one gesturing thoughtfully; the grandson watches"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE EASTERLIN PUZZLE",
+        "captionLine1": "Researchers still debate the pattern’s strength.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 8,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE EASTERLIN PUZZLE"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "Two small researcher stick figures examine the same unlabeled flat happiness line from different angles, one leaning in and one gesturing thoughtfully; the grandson watches. Cool blue accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "Researchers still debate the pattern’s strength."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_08.png"
+    },
+    {
+      "sceneNo": 9,
+      "narration": "In 2003, writer Gregg Easterbrook called it the Progress Paradox.",
+      "startTime": 38,
+      "endTime": 42,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandson stands beside an unlabeled open book and the same rising-comfort versus flat-feeling line diagram; keep the line graph clear and visual. Cool blue accents. Use cool modern blues (#6FA8D6) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE NAME; Bottom Caption: Easterbrook named the Progress Paradox.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandson with consistent cool-blue hoodie",
+        "The grandson stands beside an unlabeled open book and the same rising-comfort versus flat-feeling line diagram; keep the line graph clear and visual"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE NAME",
+        "captionLine1": "Easterbrook named the Progress Paradox.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 9,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE NAME"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandson stands beside an unlabeled open book and the same rising-comfort versus flat-feeling line diagram; keep the line graph clear and visual. Cool blue accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "Easterbrook named the Progress Paradox."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_09.png"
+    },
+    {
+      "sceneNo": 10,
+      "narration": "Part of the reason is that we get used to everything. Psychologists call it the hedonic treadmill. Every upgrade becomes the new normal within months.",
+      "startTime": 42,
+      "endTime": 48,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandson runs on a simple treadmill as successive small comforts appear around him; his expression settles back to neutral, with no labels or text in the illustration. Cool blue accents. Use cool modern blues (#6FA8D6) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE HEDONIC TREADMILL; Bottom Caption: Upgrades become normal within months.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandson with consistent cool-blue hoodie",
+        "The grandson runs on a simple treadmill as successive small comforts appear around him; his expression settles back to neutral, with no labels or text in the illustration"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE HEDONIC TREADMILL",
+        "captionLine1": "Upgrades become normal within months.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 10,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE HEDONIC TREADMILL"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandson runs on a simple treadmill as successive small comforts appear around him; his expression settles back to neutral, with no labels or text in the illustration. Cool blue accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "Upgrades become normal within months."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_10.png"
+    },
+    {
+      "sceneNo": 11,
+      "narration": "The other part is comparison. Your grandfather compared himself to his village.",
+      "startTime": 48,
+      "endTime": 52,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandfather with cane stands among a few familiar village neighbors, sharing a relaxed everyday moment. Earth-tone accents. Use village earth tones (#C58B55) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE COMPARISON TRAP; Bottom Caption: Grandfather compared himself to his village.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandfather with simple cane",
+        "The grandfather with cane stands among a few familiar village neighbors, sharing a relaxed everyday moment"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE COMPARISON TRAP",
+        "captionLine1": "Grandfather compared himself to his village.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 11,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE COMPARISON TRAP"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandfather with cane stands among a few familiar village neighbors, sharing a relaxed everyday moment. Earth-tone accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "Grandfather compared himself to his village."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_11.png"
+    },
+    {
+      "sceneNo": 12,
+      "narration": "You compare yourself to millions of people on your phone.",
+      "startTime": 52,
+      "endTime": 54,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandson looks at a phone as a crowd of many tiny profile silhouettes surrounds the screen; no marks, labels, or letters. Cool blue accents. Use cool modern blues (#6FA8D6) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE COMPARISON TRAP; Bottom Caption: You compare yourself to millions.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandson with consistent cool-blue hoodie",
+        "The grandson looks at a phone as a crowd of many tiny profile silhouettes surrounds the screen; no marks, labels, or letters"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE COMPARISON TRAP",
+        "captionLine1": "You compare yourself to millions.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 12,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE COMPARISON TRAP"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandson looks at a phone as a crowd of many tiny profile silhouettes surrounds the screen; no marks, labels, or letters. Cool blue accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "You compare yourself to millions."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_12.png"
+    },
+    {
+      "sceneNo": 13,
+      "narration": "And progress brings new problems. More choices, more pressure, more information than your brain was built to handle.",
+      "startTime": 54,
+      "endTime": 59,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandson is crowded by many blank choice objects, notification-like shapes without symbols, and layered abstract information tiles; a small low red heart meter shows strain. Cool blue accents. Use cool modern blues (#6FA8D6) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: NEW PROBLEMS; Bottom Caption: More choices, pressure, information than we can handle.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandson with consistent cool-blue hoodie",
+        "The grandson is crowded by many blank choice objects, notification-like shapes without symbols, and layered abstract information tiles; a small low red heart meter shows strain"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "NEW PROBLEMS",
+        "captionLine1": "More choices, pressure, information than we can handle.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 13,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "NEW PROBLEMS"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandson is crowded by many blank choice objects, notification-like shapes without symbols, and layered abstract information tiles; a small low red heart meter shows strain. Cool blue accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "More choices, pressure, information than we can handle."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_13.png"
+    },
+    {
+      "sceneNo": 14,
+      "narration": "None of this means the past was better. Nobody wants to go back to hunger and disease, but it means comfort was never going to be enough on its own.",
+      "startTime": 59,
+      "endTime": 65,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. Grandfather and grandson stand together, the grandfather’s cane beside him; a simple contrast of the old village home and present-day comfort remains in the background. Warm earth tones and cool blue accents. Use village earth tones (#C58B55) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE TAKEAWAY; Bottom Caption: Past was not better; comfort is not enough.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandfather with simple cane",
+        "Grandson with consistent cool-blue hoodie",
+        "Grandfather and grandson stand together, the grandfather’s cane beside him; a simple contrast of the old village home and present-day comfort remains in the background"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE TAKEAWAY",
+        "captionLine1": "Past was not better; comfort is not enough.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 14,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE TAKEAWAY"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "Grandfather and grandson stand together, the grandfather’s cane beside him; a simple contrast of the old village home and present-day comfort remains in the background. Warm earth tones and cool blue accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "Past was not better; comfort is not enough."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_14.png"
+    },
+    {
+      "sceneNo": 15,
+      "narration": "The things that make life feel good were never the things progress was measuring.",
+      "startTime": 65,
+      "endTime": 67,
+      "imagePrompt": "Square 1:1 minimalist 2D vector comic panel, 1080x1080. Background #FDFBF7, linework #1A1A1A. Keep the recurring Grandfather design consistent: elderly thin stick figure, round head, simple cane, plain earth-tone vest. Keep the recurring Grandson design consistent: young stick figure, round head, plain cool-blue hoodie. The grandfather and grandson share a quiet conversation while the grandson’s small red heart meter remains modest and steady at about one-third; comforts sit in the background, secondary to their connection. Cool blue accents. Use cool modern blues (#6FA8D6) for this setting. Illustration occupies vertical 15-74 percent; no text inside the illustration. Render only these two text overlays: Top Header: THE TAKEAWAY; Bottom Caption: Life’s good things were never measured.. Place header in title band 0-14 percent and caption in bottom band 75-100 percent. No other text, letters, numerals, signs, or labels.",
+      "negativePrompt": "text inside illustration, letters, numerals, signs, labels, speech bubbles, watermarks, photorealism, 3D, inconsistent character design, extra limbs, clutter, blurry lines",
+      "requiredElements": [
+        "Grandfather with simple cane",
+        "Grandson with consistent cool-blue hoodie",
+        "The grandfather and grandson share a quiet conversation while the grandson’s small red heart meter remains modest and steady at about one-third; comforts sit in the background, secondary to their connection"
+      ],
+      "mustNotInclude": [
+        "Sam",
+        "text inside illustration",
+        "labels",
+        "unrelated concepts"
+      ],
+      "textOverlays": {
+        "header": "THE TAKEAWAY",
+        "captionLine1": "Life’s good things were never measured.",
+        "captionLine2": null,
+        "redEmphasis": null,
+        "diagramLabels": []
+      },
+      "compositionPlan": {
+        "sceneId": 15,
+        "topTitleZone": {
+          "yRange": [
+            0,
+            14
+          ],
+          "text": "THE TAKEAWAY"
+        },
+        "centralIllustrationZone": {
+          "yRange": [
+            15,
+            74
+          ],
+          "elements": [
+            "Grandfather and Grandson in consistent designs",
+            "The grandfather and grandson share a quiet conversation while the grandson’s small red heart meter remains modest and steady at about one-third; comforts sit in the background, secondary to their connection. Cool blue accents."
+          ]
+        },
+        "bottomCaptionZone": {
+          "yRange": [
+            75,
+            100
+          ],
+          "text": "Life’s good things were never measured."
+        }
+      },
+      "imageGenerated": false,
+      "plannedImageFile": "images/scene_15.png"
+    }
+  ]
+}

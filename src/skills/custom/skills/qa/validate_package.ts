@@ -180,8 +180,8 @@ export function validatePackage(
       .digest("hex")
       .slice(0, 12),
   };
-  if (beats.length < 14 || beats.length > 16)
-    R.block("timing", null, `${beats.length} beats; required 14-16.`);
+  if (beats.length < 12 || beats.length > 16)
+    R.block("timing", null, `${beats.length} beats; required 12-16.`);
   if (norm(joined) !== norm(script.narration))
     R.block(
       "narrationConsistency",
@@ -211,8 +211,8 @@ export function validatePackage(
       null,
       `Beat durations sum to ${durSum}s vs target ${target}s (tolerance +/-${TOL_DURATION}s).`,
     );
-  if (durSum < 50 || durSum > 52)
-    R.block("timing", null, `Beat durations sum to ${durSum}s; this format requires 50-52s.`);
+  if (durSum < 45 || durSum > 75)
+    R.block("timing", null, `Beat durations sum to ${durSum}s; this format requires 45-75s.`);
   if (
     typeof script.durationSumCheck === "number" &&
     Math.abs(script.durationSumCheck - durSum) > 0.05

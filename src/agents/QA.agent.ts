@@ -1,5 +1,6 @@
 import type { Script } from "../schema/script.schema.js";
 import { runAgent } from "./base.agent.js";
+import { deriveBeatTiming } from "./script-timing.js";
 
 export type Stage =
   | "brief"
@@ -58,31 +59,26 @@ export function normalizeScript(input: Script): Script {
   ) {
     throw new Error("Script must contain a non-empty beats array.");
   }
+  if (input.beats.length < 12 || input.beats.length > 16) {
+    throw new Error(`Script must contain 12–16 beats (received ${input.beats.length}).`);
+  }
 
   const beats = input.beats.map((beat, index) => {
     if (!beat || typeof beat.narration !== "string" || !beat.narration.trim()) {
       throw new Error(`Script beat ${index + 1} must contain narration.`);
     }
     const beatId = `B${String(index + 1).padStart(2, "0")}`;
-    const duration = Number(beat.estimatedDurationSeconds);
-    if (!Number.isFinite(duration) || duration <= 0) {
-      throw new Error(
-        `Script beat ${beatId} must have a positive estimatedDurationSeconds.`,
-      );
-    }
-    if (duration < 3 || duration > 4) {
-      throw new Error(
-        `Script beat ${beatId} estimatedDurationSeconds must be 3–4 seconds (received ${duration}).`,
-      );
-    }
-    const wordCount = (
-      beat.narration.match(/[A-Za-z0-9]+(?:['’\\-][A-Za-z0-9]+)*/g) ?? []
-    ).length;
+    const { wordCount, estimatedDurationSeconds } = deriveBeatTiming(
+      beat.narration,
+      index < input.beats.length - 1,
+    );
+    if (wordCount === 0) throw new Error(`Script beat ${beatId} must contain spoken words.`);
     return {
       ...beat,
       beatId,
       cardNumber: index + 1,
       claimIds: Array.isArray(beat.claimIds) ? beat.claimIds : [],
+      estimatedDurationSeconds,
       wordCount,
     };
   });
@@ -96,9 +92,9 @@ export function normalizeScript(input: Script): Script {
       .reduce((sum, beat) => sum + beat.estimatedDurationSeconds, 0)
       .toFixed(2),
   );
-  if (durationSumCheck < 50 || durationSumCheck > 52) {
+  if (durationSumCheck < 45 || durationSumCheck > 75) {
     throw new Error(
-      `Script estimated runtime must total 50–52 seconds (received ${durationSumCheck}s).`,
+      `Script estimated runtime must total 45–75 seconds (received ${durationSumCheck}s).`,
     );
   }
   return {

@@ -29,7 +29,7 @@ Keep technical compliance separate from creative quality. A mechanically valid p
 2.  Validator coverage
     The input is { package, validatorReport }. Treat validatorReport as the authoritative result of deterministic checks; do not rerun them. It may cover:
 
-        script.beats existence, beat count (14–16), stable Bnn IDs and card numbers.
+        script.beats existence, beat count (12–16), stable Bnn IDs and card numbers.
         Narration equality to joined beats, declared and actual word counts, word target, per-beat and total duration, words per second, duration-sum consistency, and durationSumCheck honesty.
         Connector vocabulary (START, BUT, THEREFORE) and banned deterministic phrasing.
         Caption length, substring, and HTML constraints.
@@ -85,6 +85,7 @@ Examples:
 Use the canonical stages and ownership in the actual package if they differ from these examples. 5. Creative quality scorecard
 Evaluate the ten dimensions named in the canonical QUALITY_RUBRIC.md on a 1–10 scale: hook/curiosity, narrative structure, central-idea clarity, cause/effect progression, emotional engagement, analogy quality and fidelity, visual storytelling, aha/payoff, factual accuracy, and ending/memorability. Give each dimension a defensible score with one sentence of evidence. Calculate the arithmetic mean deterministically on the same 1–10 scale; do not round upward. Report technical compliance separately from creative quality. Scores must reflect the observed package, not the requested release target.
 Storytelling-specific calibration:
+Single-concept discipline: the script must stay on exactly one named theory/paradox throughout. Flag as REVISION_REQUIRED if a second named theory appears; secondary mechanisms must be described in plain language as facets of the approved coreConcept.
 
     High hook/curiosity requires a truthful, specific question that the explanation pays off—not clickbait.
     High narrative-structure and cause/effect scores require coherent, evidence-faithful progression—not merely dramatic beats.
@@ -106,8 +107,8 @@ Return valid JSON only, no commentary or Markdown fences. Preserve this root-lev
 "timingAudit": {
 "source": "validatorReport",
 "cardCount": 15,
-"sumOfSceneDurations": 50.4,
-"targetDurationSeconds": 50.4,
+"sumOfSceneDurations": 60,
+"targetDurationSeconds": 60,
 "deltaSeconds": 0,
 "actualWordCount": 156,
 "targetWordRange": [150] [162],

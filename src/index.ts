@@ -37,6 +37,28 @@ async function generateExplainer(topic: string) {
     const result = latestState;
     if (!result) throw new Error("Production graph completed without yielding state.");
 
+    if (!result.finalOutput) {
+      const stopDetails = [
+        typeof result.qaFeedback === "string" ? result.qaFeedback : "",
+        Array.isArray(result.errors) ? result.errors.join("; ") : "",
+      ].filter(Boolean).join(" ") || "No QA feedback was recorded.";
+      const failure = {
+        failed: true,
+        topic,
+        error: `Production stopped before final output. ${stopDetails}`,
+        savedAt: new Date().toISOString(),
+        state: result,
+      };
+      await writeJsonAtomically(path.join(outputDir, `${slug}.failed.json`), failure);
+      await fs.writeFile(
+        path.join(outputDir, `${slug}.failed.md`),
+        `# Production stopped after script QA\n\n${failure.error}\n\nThe latest script and workflow state are saved in \`${slug}.failed.json\`.`,
+        "utf-8",
+      );
+      console.error(`Production stopped after script QA; latest state saved to ${path.join(outputDir, `${slug}.failed.json`)}`);
+      return;
+    }
+
     console.log("\n========== FINAL SCRIPT ==========\n");
     console.log(result.script);
     console.log("\n========== FINAL PRODUCTION ==========\n");

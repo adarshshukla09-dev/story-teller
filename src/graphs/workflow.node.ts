@@ -3,7 +3,11 @@ import { researchAgent } from "../agents/research.agent.js";
 import { factCheckAgent } from "../agents/fact-check.agent.js";
 import { strategyAgent } from "../agents/strategy.agent.js";
 import { directorAgent } from "../agents/director.agent.js";
-import { scriptwriterAgent } from "../agents/scriptwriter.agent.js";
+import {
+  scriptwriterAgent,
+  buildStoryScriptPrompt,
+} from "../agents/scriptwriter.agent.js";
+import { validateScript } from "../agents/validate-script.js";
 import { qaAgent, normalizeScript } from "../agents/QA.agent.js";
 import { artDirectionAgent } from "../agents/artDirectionAgent.agent.js";
 import { storyboardAgent } from "../agents/storyboard.agent.js";
@@ -17,6 +21,7 @@ import type {
 } from "./workflow.state.js";
 import { finalQAagent } from "../agents/QA.agent.js";
 import { FactCheckResultSchema } from "../schema/fact.schema.js";
+import { extractNamedConcepts, findDisallowedNamedConcepts } from "./named-concepts.js";
 
 const MAX_SCRIPT_REVISIONS = 2;
 
@@ -219,10 +224,10 @@ export function qaRouter(state: typeof ProductionState.State) {
     return "scriptwriterAgent";
   }
 
-  throw new Error(
-    `Script QA failed after ${MAX_SCRIPT_REVISIONS} revisions. ` +
-      `Production stopped. QA feedback: ${state.qaFeedback}`,
+  console.error(
+    `Script QA failed after ${MAX_SCRIPT_REVISIONS} revisions. Saving the script and stopping this run. QA feedback: ${state.qaFeedback}`,
   );
+  return "__end__";
 }
 export async function prepareSceneImagesNode(state: ProductionStateType) {
   const parsedStoryboard =
@@ -444,9 +449,18 @@ export async function imageNode(state: ProductionStateType) {
   };
 }
 export async function comprehensionNode(state: ProductionStateType) {
-  const result = await comprehensionAgent(state.topic);
+  const result = await comprehensionAgent(`${state.topic}\n\nSelect exactly one named coreConcept that the full explainer will teach. Return it as a top-level coreConcept string and include relatedConceptsExcluded, a list of adjacent named ideas that should not be introduced. The central concept must be one concept, not a bundle.`);
+  let coreConcept = state.topic;
+  let relatedConceptsExcluded: string[] = [];
+  try {
+    const data = extractJsonObject(result);
+    if (typeof data.coreConcept === "string" && data.coreConcept.trim()) coreConcept = data.coreConcept.trim();
+    if (Array.isArray(data.relatedConceptsExcluded)) relatedConceptsExcluded = data.relatedConceptsExcluded.map(String);
+  } catch { /* The research node will establish the canonical concept if comprehension output is legacy text. */ }
   return {
     comprehension: result,
+    coreConcept,
+    relatedConceptsExcluded,
   };
 }
 export async function researchNode(state: ProductionStateType) {
@@ -457,17 +471,36 @@ ${state.topic}
 COMPREHENSION:
 ${state.comprehension}
 
+PRELIMINARY CORE CONCEPT:
+${state.coreConcept}
+PRELIMINARY EXCLUSIONS:
+${JSON.stringify(state.relatedConceptsExcluded)}
+
+CORE CONCEPT SELECTION:
+Select exactly one named coreConcept for the explainer and return it as a top-level field. Include relatedConceptsExcluded, an array of adjacent concepts deliberately excluded. Keep the dossier focused on that one concept; describe other mechanisms in plain language unless essential as evidence for the same concept.
+
 Research the topic and create a detailed evidence-based research dossier.
 `);
 
-  return {
-    researchDossier: result,
-  };
+  let coreConcept = state.coreConcept || state.topic;
+  let relatedConceptsExcluded = state.relatedConceptsExcluded;
+  try {
+    const data = extractJsonObject(result);
+    if (typeof data.coreConcept === "string" && data.coreConcept.trim()) coreConcept = data.coreConcept.trim();
+    if (Array.isArray(data.relatedConceptsExcluded)) relatedConceptsExcluded = data.relatedConceptsExcluded.map(String);
+  } catch { /* Preserve the upstream selection when research uses a legacy response. */ }
+  return { researchDossier: result, coreConcept, relatedConceptsExcluded };
 }
 export async function factCheckNode(state: ProductionStateType) {
   const result = await factCheckAgent(`
 TOPIC:
 ${state.topic}
+
+CORE CONCEPT:
+${state.coreConcept}
+
+EXCLUDED ADJACENT CONCEPTS (do not name or teach these):
+${JSON.stringify(state.relatedConceptsExcluded)}
 
 RESEARCH DOSSIER:
 ${state.researchDossier}
@@ -529,6 +562,12 @@ export async function strategyNode(state: ProductionStateType) {
 TOPIC:
 ${state.topic}
 
+CORE CONCEPT:
+${state.coreConcept}
+
+RELATED CONCEPTS EXCLUDED:
+${JSON.stringify(state.relatedConceptsExcluded)}
+
 COMPREHENSION:
 ${state.comprehension}
 
@@ -538,6 +577,7 @@ ${state.researchDossier}
 FACT CHECK:
 ${JSON.stringify(state.factCheck, null, 2)}
 
+You are designing a story strategy for exactly ONE named concept, given as coreConcept. Do not introduce a second named theory, paradox, law, or effect anywhere in the strategy, even as a supporting mechanism, unless it is a renamed/synonymous version of the same coreConcept. If the research dossier contains multiple candidate concepts, pick the single best one and discard the rest — do not blend them. Every example, scene, or mechanism must be explainable as a facet or consequence of coreConcept, not as a separate causal force.
 Design a storytelling strategy for a 2D hand-drawn stickman comic explainer video.
 Focus on relatable everyday situations, clear visual contrasts, simple charts, and punchy 2-line comic captions.
 Choose the story engine that best fits the topic. When a person-centered story fits, follow one character's desire or expectation, obstacle, consequence, and earned realization across the arc. Introduce concepts only as they explain events in this journey; prefer a few connected ideas over a list. End by revealing what the character's experience means, grounded in evidence. A clearly labeled illustrative fictional scenario is allowed, but never present it as a true anecdote or evidence. For topics where a protagonist would be artificial, use a coherent system, historical, or thought-experiment arc instead.
@@ -549,9 +589,10 @@ Choose the story engine that best fits the topic. When a person-centered story f
 }
 export async function directorNode(state: ProductionStateType) {
   const factCheckText = JSON.stringify(state.factCheck ?? {}, null, 2);
-
-  const result = await directorAgent({
+  const input = {
     topic: state.topic,
+    coreConcept: state.coreConcept,
+    relatedConceptsExcluded: state.relatedConceptsExcluded,
     referenceScript: state.referenceScript,
     researchDossier: {
       research: state.researchDossier,
@@ -559,18 +600,87 @@ export async function directorNode(state: ProductionStateType) {
     },
     factCheckReport: factCheckText,
     explanationStrategy: state.explanationStrategy,
-  });
+  };
+  let result = "";
+  let beatCount = 0;
+  let correction: string | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    result = await directorAgent({
+      ...input,
+      ...(correction ? { correction } : {}),
+    });
+    beatCount = countDirectorBeats(result);
+    if (beatCount >= 12 && beatCount <= 16) break;
+    if (attempt < 2) {
+      correction = `The previous plan had ${beatCount || "an unreadable number of"} beats. Return a complete revised plan with 12–16 distinct, logically necessary beats. Preserve the single narrative spine and do not pad with unrelated concepts. The scriptwriter must produce one beat per Director beat.`;
+    }
+  }
 
   return {
     directorOutput: result,
+    ...(beatCount < 12 || beatCount > 16
+      ? {
+          errors: [
+            ...(state.errors ?? []),
+            `Director beat-count validation failed after 3 attempts: received ${beatCount}; expected 12–16.`,
+          ],
+        }
+      : {}),
   };
+}
+function countDirectorBeats(result: string): number {
+  try {
+    const parsed = extractJsonObject(result);
+    const findBeatArray = (value: any): any[] | undefined => {
+      if (!value || typeof value !== "object") return undefined;
+      for (const [key, child] of Object.entries(value)) {
+        if (
+          ["beatmap", "beats", "visualbeats", "visualbeatmap"].includes(
+            key.toLowerCase(),
+          ) &&
+          Array.isArray(child)
+        )
+          return child;
+      }
+      for (const child of Object.values(value)) {
+        const found = findBeatArray(child);
+        if (found) return found;
+      }
+      return undefined;
+    };
+    const beatArray = findBeatArray(parsed);
+    if (beatArray) return beatArray.length;
+  } catch {
+    // Director responses may be structured as a markdown table under the legacy contract.
+  }
+  const lines = result.split(/\r?\n/);
+  const timeRows = lines.filter((line) =>
+    /^\s*\|\s*\**\d{1,2}:\d{2}\**\s*\|/.test(line),
+  );
+  if (timeRows.length) return timeRows.length;
+  const numberedRows = lines.filter((line) => /^\s*\|\s*\d+\s*\|/.test(line));
+  if (numberedRows.length) return numberedRows.length;
+  return lines.filter((line) => /^\s*(?:beat|b)\s*\d+\b/i.test(line)).length;
+}
+export function directorRouter(state: ProductionStateType) {
+  return (state.errors ?? []).some((error) =>
+    error.startsWith("Director beat-count validation failed"),
+  )
+    ? "__end__"
+    : "scriptwriterAgent";
 }
 export async function scriptwriterNode(state: ProductionStateType) {
   const isRevision = state.qaStatus === "revision_required";
-
-  const result = await scriptwriterAgent(`
+  const storyPrompt = await buildStoryScriptPrompt(state.topic || "", 60, state.coreConcept || state.topic || "");
+  const context = `
 TOPIC:
 ${state.topic}
+
+CORE CONCEPT (the only named concept to explain):
+${state.coreConcept}
+
+RELATED CONCEPTS EXCLUDED (do not name or teach):
+${JSON.stringify(state.relatedConceptsExcluded)}
 
 REFERENCE NARRATION:
 ${state.referenceScript}
@@ -594,11 +704,15 @@ QA REVISION FEEDBACK:
 ${isRevision ? state.qaFeedback : "No revision feedback."}
 
 SCENE AND NARRATION REQUIREMENTS:
+- Explain exactly one named concept: coreConcept. Do not name, define, or lean on any other named psychological/economic theory, paradox, or law. Explain secondary mechanisms in plain language as facets of coreConcept.
+- Favor one extended, concrete example (one person, one scenario, followed start to finish) over multiple short examples illustrating different ideas.
 - Return a single JSON object whose top-level "beats" field is a non-empty array. Do not nest the script under "script" or "output", and do not return a bare array.
 - Produce exactly one script beat for each Director beatMap entry.
+- The Director beat map must contain 12–16 beats, and the script must contain the same number. If the Director supplied an invalid beat count, report the mismatch instead of silently dropping or merging beats.
 - Do not split, merge, or reorder Director beats.
-- Target 50–52 seconds total across 14–16 beats; each beat must be 3–4 seconds.
-- Include estimatedDurationSeconds as a positive JSON number on every beat, normally 3–4; never omit it, use a string, or set it to null. Choose durations whose actual sum is 50–52 seconds; do not assign 3.5 seconds to every beat by default (15 beats at 3.5 seconds is 52.5 seconds; 3.4 seconds each is 51 seconds).
+- Target about 60 seconds, within 45–75 seconds total, following the Director's beat count.
+- Keep narration near 160 words for a 60-second target (scale the word budget with the requested duration). Do not exceed 3 words per second after code-derived timing; remove tangents and unrelated mechanisms before compressing essential logic.
+- Include estimatedDurationSeconds as a positive JSON number on every beat, but treat it as advisory: code recomputes duration from narration word count at about 2.7 words/second with a short inter-beat pause.
 - Keep narration concise, natural, accurate, and understandable when heard independently.
 - Tell the approved story through the explanation: for a character-led arc, establish what the character wants or expects, show the obstacle and consequence, weave concepts in as explanations for those events, and earn the realization through evidence and mechanism. The ending should reveal the meaning through the story itself. For other story engines, preserve the same connected progression from concrete opening through discovery to payoff. Avoid a concept-by-concept lecture or study list. Use human detail only when supported, or label an invented scenario as illustrative; never invent factual events, quotations, statistics, or researcher claims.
 - Keep the Script artifact canonical: narration, timing, suggested caption, and beat-to-claim references only. Do not add scene IDs, imageDetails, or visual prompts to script beats.
@@ -607,12 +721,41 @@ SCENE AND NARRATION REQUIREMENTS:
 REFERENCE FIDELITY REQUIREMENTS:
 - Preserve the reference's central idea and essential explanatory progression.
 - Do not replace its story with a different story or introduce unrelated concepts from research.
-- Adapt and tighten the narration to the requested 50–52 second runtime; do not preserve the reference clip's length by default.
+- Adapt narration to the requested target duration. If the reference script specifies a runtime, preserve its intended structure within the 45–75 second format.
 - Improve clarity and spoken flow without changing the intended message.
 - If a change is necessary for factual accuracy, identify it explicitly.
 
 Return valid JSON only, following the Scriptwriter output contract and skill.
-`);
+`;
+  let result = "";
+  let feedback = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    result = await scriptwriterAgent(`${storyPrompt}\n\n${context}${feedback}`);
+    try {
+      const parsed = extractJsonObject(result);
+      const validation = validateScript(parsed);
+      if (!validation.errors.length) {
+        if (validation.warnings.length)
+          console.warn("Script validation warnings:", validation.warnings);
+        break;
+      }
+      if (attempt < 2)
+        feedback = `\n\nCORRECTION REQUIRED: Fix these validator errors and return the complete JSON again:\n- ${validation.errors.join("\n- ")}`;
+      else
+        console.error(
+          "Script validation failed after 3 attempts; preserving generated output:",
+          validation.errors,
+        );
+    } catch (error) {
+      if (attempt < 2)
+        feedback = `\n\nCORRECTION REQUIRED: Return valid JSON. Parser error: ${(error as Error).message}`;
+      else
+        console.error(
+          "Script JSON could not be validated after 3 attempts; preserving generated output:",
+          error,
+        );
+    }
+  }
 
   return {
     script: result,
@@ -624,27 +767,50 @@ export async function qaNode(state: ProductionStateType) {
   // Enforce the canonical script contract before asking a model for creative QA.
   // This prevents an otherwise polished but incomplete script from being approved
   // and propagated into storyboard and production assembly.
+  let normalizedScript: any;
   try {
-    const scriptValue = typeof state.script === "string"
-      ? extractJsonObject(state.script)
-      : state.script;
-    normalizeScript(scriptValue as any);
+    const scriptValue =
+      typeof state.script === "string"
+        ? extractJsonObject(state.script)
+        : state.script;
+    normalizedScript = normalizeScript(scriptValue as any);
   } catch (error) {
-    const validationMessage = error instanceof Error ? error.message : String(error);
-    const durationFailure = validationMessage.match(/Script beat (B\d+) must have a positive estimatedDurationSeconds\./);
-    const durationRangeFailure = validationMessage.match(/Script beat (B\d+) estimatedDurationSeconds must be 3–4 seconds \(received ([\d.]+)\)\./);
-    const runtimeFailure = validationMessage.match(/Script estimated runtime must total 50–52 seconds \(received ([\d.]+)s\)\./);
+    const validationMessage =
+      error instanceof Error ? error.message : String(error);
+    const durationFailure = validationMessage.match(
+      /Script beat (B\d+) must have a positive estimatedDurationSeconds\./,
+    );
+    const beatCountFailure = validationMessage.match(
+      /Script must contain 12–16 beats \(received (\d+)\)\./,
+    );
+    const runtimeFailure = validationMessage.match(
+      /Script estimated runtime must total 45–75 seconds \(received ([\d.]+)s\)\./,
+    );
     const repairInstruction = durationFailure
-      ? `Beat ${durationFailure[1]} is missing a valid numeric estimatedDurationSeconds. Set it to a number from 3 to 4 seconds and ensure all beat durations sum to 50–52 seconds. Preserve its narration and all approved beat fields.`
-      : durationRangeFailure
-        ? `Beat ${durationRangeFailure[1]} is ${durationRangeFailure[2]} seconds, outside the allowed 3–4 second range. Set this beat to at least 3 and at most 4 seconds, then adjust other duration values as needed so the total remains 50–52 seconds. Preserve all narration and approved beat fields.`
-      : runtimeFailure
-        ? `Beat durations currently total ${runtimeFailure[1]} seconds. Adjust only estimatedDurationSeconds values so the sum is 50–52 seconds, keeping each beat between 3 and 4 seconds. For 15 beats, 3.4 seconds each totals 51 seconds. Preserve all narration and approved beat fields.`
-      : validationMessage.includes("Script must contain a non-empty beats array")
-        ? `The Script output is missing its required non-empty top-level beats array. Return one JSON object with a top-level "beats" array containing exactly one complete beat for each Director beat. Do not wrap the object in a "script" or "output" property and do not return a bare array.`
-      : `Correct the canonical Script validation error while preserving approved beat order, IDs, and content: ${validationMessage}`;
+      ? `Beat ${durationFailure[1]} has an invalid estimatedDurationSeconds value. Supply a positive number; code will recompute timing from its narration.`
+      : beatCountFailure
+        ? `The script has ${beatCountFailure[1]} beats. Return 12–16 beats matching the complete Director story progression; do not omit or merge explanatory steps.`
+        : runtimeFailure
+          ? `Narration-derived runtime is ${runtimeFailure[1]} seconds, outside 45–75 seconds. Adjust narration or beat scope to fit the target while preserving accuracy and approved structure.`
+          : validationMessage.includes(
+                "Script must contain a non-empty beats array",
+              )
+            ? `The Script output is missing its required non-empty top-level beats array. Return one JSON object with a top-level "beats" array containing exactly one complete beat for each Director beat. Do not wrap the object in a "script" or "output" property and do not return a bare array.`
+            : `Correct the canonical Script validation error while preserving approved beat order, IDs, and content: ${validationMessage}`;
     return {
       qaFeedback: `REVISION_REQUIRED: ${repairInstruction} Return exactly one complete beat for every Director beat, with non-empty narration and a positive numeric estimatedDurationSeconds.`,
+      qaStatus: "revision_required" as const,
+    };
+  }
+
+  const narration = normalizedScript.narration ?? normalizedScript.beats.map((beat: any) => beat.narration).join(" ");
+  const namedConcepts = extractNamedConcepts(narration);
+  const disallowed = findDisallowedNamedConcepts(narration, state.coreConcept);
+  if (disallowed.length > 0) {
+    const reported = [...new Set([state.coreConcept, ...namedConcepts].filter(Boolean))];
+    return {
+      script: JSON.stringify(normalizedScript),
+      qaFeedback: `REVISION_REQUIRED: Script introduces multiple named theories: ${reported.join(", ")}. Only '${state.coreConcept}' is allowed. Rewrite so every other idea is explained in plain language as part of this concept, not named separately.`,
       qaStatus: "revision_required" as const,
     };
   }
@@ -653,6 +819,9 @@ export async function qaNode(state: ProductionStateType) {
 TOPIC:
 ${state.topic}
 
+CORE CONCEPT (only named concept allowed):
+${state.coreConcept}
+
 ORIGINAL RESEARCH:
 ${state.researchDossier}
 
@@ -660,7 +829,7 @@ FACT CHECK:
 ${JSON.stringify(state.factCheck, null, 2)}
 
 SCRIPT:
-${state.script}
+${JSON.stringify(normalizedScript)}
 
 Evaluate:
 
@@ -673,6 +842,7 @@ Evaluate:
 7. Simplicity and comprehension.
 8. Pacing and narration.
 9. Strength of conclusion.
+10. Single-concept discipline: the script must stay on exactly one named theory/paradox throughout. Flag as REVISION_REQUIRED if a second named theory appears.
 
 Return a clear decision:
 APPROVED or REVISION_REQUIRED.
@@ -684,6 +854,7 @@ If revision is required, explain the exact corrections.
     /\bAPPROVED\b/i.test(result) && !/\bREVISION_REQUIRED\b/i.test(result);
 
   return {
+    script: JSON.stringify(normalizedScript),
     qaFeedback: result,
     qaStatus: approved ? ("approved" as const) : ("revision_required" as const),
   };
@@ -704,9 +875,10 @@ ${state.storyboard}
 export async function finalQaNode(state: ProductionStateType) {
   let visualPromptData: any;
   try {
-    visualPromptData = typeof state.visualPrompts === "string"
-      ? extractJsonObject(state.visualPrompts)
-      : state.visualPrompts;
+    visualPromptData =
+      typeof state.visualPrompts === "string"
+        ? extractJsonObject(state.visualPrompts)
+        : state.visualPrompts;
   } catch {
     visualPromptData = undefined;
   }
@@ -754,6 +926,9 @@ export async function finalQaNode(state: ProductionStateType) {
 TOPIC:
 ${state.topic}
 
+CORE CONCEPT:
+${state.coreConcept}
+
 DIRECTOR BRIEF:
 ${state.directorOutput}
 
@@ -781,14 +956,15 @@ ${JSON.stringify(state.imageValidationIssues, null, 2)}
 Perform final production QA for a richly colored 2D comic explainer card series.
 
 Check:
-1. Factual accuracy and claim traceability.
-2. Storytelling and comprehension.
-3. Beat-to-scene coverage (every beat has a matching sceneId generated image).
-4. Narration preservation.
-5. Storyboard title, bottom key phrase, and diagram labels are present in their matching textOverlays fields and the exact title/caption strings are requested visibly in the matching image prompt.
-6. Character and prop continuity (stickman style, bold dark outlines, consistent colors).
-7. Image prompts allow only the exact approved title and scene caption (and approved diagram labels); prohibit other readable text. This run is prompt-only, so generatedImages is expected to be empty; check generatedImagePrompts coverage and unresolved prompt errors instead of requiring imageUrl/base64 payloads.
-8. Approve only when every required check passes. Otherwise require revision and report concrete, minimal corrections.
+1. Single-concept discipline: narration and storyboard stay focused on the supplied coreConcept and do not introduce a second named theory, paradox, effect, or law. Report a concrete correction when they drift.
+2. Factual accuracy and claim traceability.
+3. Storytelling and comprehension.
+4. Beat-to-scene coverage (every beat has a matching sceneId generated image).
+5. Narration preservation.
+6. Storyboard title, bottom key phrase, and diagram labels are present in their matching textOverlays fields and the exact title/caption strings are requested visibly in the matching image prompt.
+7. Character and prop continuity (stickman style, bold dark outlines, consistent colors).
+8. Image prompts allow only the exact approved title and scene caption (and approved diagram labels); prohibit other readable text. This run is prompt-only, so generatedImages is expected to be empty; check generatedImagePrompts coverage and unresolved prompt errors instead of requiring imageUrl/base64 payloads.
+9. Approve only when every required check passes. Otherwise require revision and report concrete, minimal corrections.
 
 TEXT RULE: The full-card image prompt must explicitly request the exact approved title at the top and scene caption at the bottom. textOverlays remains the canonical copy for QA and renderer handoff. Do not add those strings a second time if they are already rendered into the image.
 
@@ -832,17 +1008,28 @@ Return exactly the final QA skill JSON contract: {"status":"approved"|"revision_
   const actionableIssues = issues.filter((issue: any) => {
     const artifact = String(issue?.artifact ?? "").toLowerCase();
     const issueText = `${issue?.description ?? ""} ${issue?.correction ?? ""}`;
-    if (!/visual\s*prompt|image\s*prompt/.test(artifact) || !/(text|label|caption|header|lettering)/i.test(issueText)) return true;
+    if (
+      !/visual\s*prompt|image\s*prompt/.test(artifact) ||
+      !/(text|label|caption|header|lettering)/i.test(issueText)
+    )
+      return true;
 
     const sceneId = Number(issue?.sceneId);
-    const prompt = imagePrompts.find((item) => Number(item.sceneId ?? item.scene) === sceneId);
+    const prompt = imagePrompts.find(
+      (item) => Number(item.sceneId ?? item.scene) === sceneId,
+    );
     const exclusions = `${prompt?.negativePrompt ?? ""} ${(prompt?.mustNotInclude ?? []).join(" ")}`;
     if (!prompt?.textOverlays || !/(text|label)/i.test(exclusions)) return true;
 
     const quotedPhrase = issueText.match(/["'“]([^"'”]{2,})["'”]/)?.[1];
     if (!quotedPhrase) return true;
-    const overlayText = JSON.stringify(prompt.textOverlays).replace(/[^a-z0-9]+/gi, " ").toLowerCase();
-    const normalizedPhrase = quotedPhrase.replace(/[^a-z0-9]+/gi, " ").trim().toLowerCase();
+    const overlayText = JSON.stringify(prompt.textOverlays)
+      .replace(/[^a-z0-9]+/gi, " ")
+      .toLowerCase();
+    const normalizedPhrase = quotedPhrase
+      .replace(/[^a-z0-9]+/gi, " ")
+      .trim()
+      .toLowerCase();
     if (!overlayText.includes(normalizedPhrase)) return true;
 
     overlaySatisfiedIssues.push(issue);

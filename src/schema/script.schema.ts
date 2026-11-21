@@ -32,5 +32,13 @@ export interface Script {
   totalWordCount?: number;
   durationSumCheck?: number;
   factCheckRequired?: unknown[];
+  storyPlan?: {
+    centralQuestion: string;
+    thesis: string;
+    keyConcepts: string[];
+    character: string;
+    recurringMotif: string;
+    emotionalArc: string;
+  };
   [key: string]: unknown;
 }

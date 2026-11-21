@@ -50,7 +50,7 @@ You are the finishing editor and deterministic rendering engineer. Assemble the 
 
 Verify before rendering final output:
 
-- [ ] Resolution is `1080 × 1080` (`1:1`) with identical square card framing across all 14–16 scenes.
+- [ ] Resolution is `1080 × 1080` (`1:1`) with identical square card framing across all 12–16 scenes.
 - [ ] `videoTitle` is identical in text, size, and position on every card.
 - [ ] Every caption matches the approved Storyboard string with accurate red emphasis and zero clipping/wrapping bugs.
 - [ ] All `programmaticOverlays` sit cleanly in their target zones without colliding with artwork focal points.

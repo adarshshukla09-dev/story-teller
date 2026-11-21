@@ -38,6 +38,11 @@ export const ProductionState = Annotation.Root({
   // =======================================
 
   topic: Annotation<string>(),
+  coreConcept: Annotation<string>(),
+  relatedConceptsExcluded: Annotation<string[]>({
+    value: (_current, update) => update,
+    default: () => [],
+  }),
 
   // =======================================
   // UNDERSTANDING

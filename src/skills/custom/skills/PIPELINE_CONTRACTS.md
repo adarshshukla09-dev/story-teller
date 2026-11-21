@@ -60,7 +60,7 @@ Allowed `compositionType`: `character-and-environment`, `top-bottom-comparison`,
 
 ### Scriptwriter timing boundary
 
-The Scriptwriter proposes estimated beat durations according to the Director's target duration. For this production format, each beat/scene is 3–4 seconds and the combined estimated runtime is 50–52 seconds, with a hard minimum of 50 seconds. Validate the total before downstream production. Do not assign 3.5 seconds to every beat by default; for 15 beats, use durations totaling 50–52 seconds (for example, 3.4 seconds each totals 51 seconds).
+The Scriptwriter supplies a positive estimated duration for every beat, but code recomputes each duration from narration word count at about 2.7 words per second plus a brief inter-beat pause. The supported total runtime is 45–75 seconds, with a default target near 60 seconds unless the approved brief sets another target. Validate the derived total before downstream production; actual audio duration is established after TTS.
 
 The Scriptwriter must report impossible timing rather than sacrifice explanatory accuracy.
 

@@ -8,6 +8,7 @@ import {
   factCheckRouter,
   strategyNode,
   directorNode,
+  directorRouter,
   scriptwriterNode,
   imageNode,
   qaNode,
@@ -83,7 +84,10 @@ export function createProductionGraph() {
 
     .addEdge("strategyAgent", "directorAgent")
 
-    .addEdge("directorAgent", "scriptwriterAgent")
+    .addConditionalEdges("directorAgent", directorRouter, {
+      scriptwriterAgent: "scriptwriterAgent",
+      __end__: END,
+    })
 
     .addEdge("scriptwriterAgent", "qaAgent")
 
@@ -94,6 +98,7 @@ export function createProductionGraph() {
     .addConditionalEdges("qaAgent", qaRouter, {
       scriptwriterAgent: "scriptwriterAgent",
       storyboardAgent: "storyboardAgent",
+      __end__: END,
     })
 
     // =======================================
@@ -105,11 +110,6 @@ export function createProductionGraph() {
     .addEdge("compositionAgent", "continuityAgent")
 
     .addEdge("continuityAgent", "visualDirectorAgent")
-
-    // =======================================
-    // SEQUENTIAL IMAGE GENERATION
-    // =======================================
-
     .addEdge("visualDirectorAgent", "prepareSceneImages")
 
     .addEdge("prepareSceneImages", "generateSceneImage")

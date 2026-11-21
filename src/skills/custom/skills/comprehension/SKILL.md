@@ -112,8 +112,12 @@ Use visualExplainability.score and sceneCompatibility.score as 0–100 ratings o
 
 Return valid JSON only.
 
+Identify exactly one named `coreConcept` that downstream production should explain and a `relatedConceptsExcluded` list of adjacent named ideas that should not be introduced. Include both as top-level fields in the output JSON.
+
 {
 "status": "pass | revise",
+"coreConcept": "",
+"relatedConceptsExcluded": [],
 "score": 0,
 "tests": [
 {
